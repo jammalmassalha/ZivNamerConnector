@@ -6,18 +6,24 @@ namespace SapSync.Infrastructure.Persistence;
 internal static class MergeSqlBuilder
 {
     private const string RowNumberColumn = "[__SapSyncRowNumber]";
+    private const string BinaryCollation = " COLLATE Latin1_General_BIN2";
 
     /// <param name="quotedTarget">Already quoted target, e.g. <c>[dbo].[Materials]</c>.</param>
     /// <param name="quotedStaging">Already quoted staging table, e.g. <c>[#TempStaging_...]</c>.</param>
     /// <param name="columns">Unquoted column names present in the staging table (including keys).</param>
     /// <param name="keyColumns">Unquoted key column names (subset of <paramref name="columns"/>).</param>
     /// <param name="detectChanges">Only update rows whose values actually differ (NULL-safe via EXCEPT).</param>
+    /// <param name="characterColumns">
+    /// Character columns compared with a binary collation during change detection, so case/accent-only changes
+    /// are not hidden by a case-insensitive column collation.
+    /// </param>
     public static string Build(
         string quotedTarget,
         string quotedStaging,
         IReadOnlyList<string> columns,
         IReadOnlyList<string> keyColumns,
-        bool detectChanges)
+        bool detectChanges,
+        IReadOnlyCollection<string>? characterColumns = null)
     {
         if (columns.Count == 0)
         {
@@ -37,7 +43,12 @@ internal static class MergeSqlBuilder
 
         var quotedColumns = columns.Select(SqlIdentifier.Quote).ToList();
         var quotedKeys = keyColumns.Select(SqlIdentifier.Quote).ToList();
-        var quotedUpdateColumns = columns.Where(c => !keySet.Contains(c)).Select(SqlIdentifier.Quote).ToList();
+        var updateColumns = columns.Where(c => !keySet.Contains(c)).ToList();
+        var quotedUpdateColumns = updateColumns.Select(SqlIdentifier.Quote).ToList();
+        var binarySet = new HashSet<string>(characterColumns ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var comparedColumns = updateColumns
+            .Select(c => (Quoted: SqlIdentifier.Quote(c), Collation: binarySet.Contains(c) ? BinaryCollation : string.Empty))
+            .ToList();
         var columnList = string.Join(", ", quotedColumns);
 
         var sql = new StringBuilder(1024);
@@ -60,9 +71,9 @@ internal static class MergeSqlBuilder
             if (detectChanges)
             {
                 sql.Append(" AND EXISTS (SELECT ")
-                   .Append(string.Join(", ", quotedUpdateColumns.Select(c => $"S.{c}")))
+                   .Append(string.Join(", ", comparedColumns.Select(c => $"S.{c.Quoted}{c.Collation}")))
                    .Append(" EXCEPT SELECT ")
-                   .Append(string.Join(", ", quotedUpdateColumns.Select(c => $"T.{c}")))
+                   .Append(string.Join(", ", comparedColumns.Select(c => $"T.{c.Quoted}{c.Collation}")))
                    .Append(')');
             }
 

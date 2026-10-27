@@ -41,6 +41,7 @@ public sealed class SqlBulkWriterIntegrationTests : IAsyncLifetime
                 MAKTX NVARCHAR(40) NULL,
                 ERSDA DATE NULL,
                 LABST DECIMAL(13,3) NULL,
+                Location GEOGRAPHY NULL,
                 LoadedAt DATETIME2 NOT NULL CONSTRAINT [DF_{_table}] DEFAULT SYSUTCDATETIME(),
                 CONSTRAINT [PK_{_table}] PRIMARY KEY (MATNR, WERKS));
             INSERT INTO dbo.[{_table}] (MATNR, WERKS, MAKTX, ERSDA, LABST) VALUES
@@ -89,6 +90,18 @@ public sealed class SqlBulkWriterIntegrationTests : IAsyncLifetime
         await Assert.ThrowsAsync<ArgumentException>(() => writer.BulkUpsertAsync(data, "dbo.DoesNotExist; DROP TABLE x", new[] { "MATNR" }));
         await Assert.ThrowsAsync<ArgumentException>(() => writer.BulkUpsertAsync(data, $"dbo.{_table}", new[] { "NOPE" }));
         await Assert.ThrowsAsync<ArgumentException>(() => writer.BulkUpsertAsync(data, $"dbo.{_table}", new[] { "Id" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => writer.BulkUpsertAsync(data, $"dbo.{_table}", new[] { "MATNR", "ERSDA" }));
+    }
+
+    [SqlServerFact]
+    public async Task BulkUpsertAsync_DetectsCaseOnlyChanges()
+    {
+        var writer = CreateWriter();
+
+        var affected = await writer.BulkUpsertAsync(Source(("M2", "1000", "UNCHANGED", null, 2m)), $"dbo.{_table}", new[] { "MATNR", "WERKS" });
+
+        Assert.Equal(1, affected);
+        Assert.Equal("UNCHANGED", (await ReadAllAsync())["M2"].Item1);
     }
 
     private SqlBulkWriter CreateWriter() => new(

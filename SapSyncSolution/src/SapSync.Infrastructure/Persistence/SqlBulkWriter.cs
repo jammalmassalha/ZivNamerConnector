@@ -19,6 +19,11 @@ public sealed class SqlBulkWriter : ISqlBulkWriter
         "xml", "text", "ntext", "image", "geography", "geometry",
     };
 
+    private static readonly HashSet<string> CharacterTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "char", "varchar", "nchar", "nvarchar",
+    };
+
     private const string ResolveTargetSql = """
         SELECT o.object_id, s.name, o.name
         FROM sys.tables AS o
@@ -27,7 +32,8 @@ public sealed class SqlBulkWriter : ISqlBulkWriter
         """;
 
     private const string TargetColumnsSql = """
-        SELECT c.name, c.is_identity, c.is_computed, TYPE_NAME(c.system_type_id)
+        SELECT c.name, c.is_identity, c.is_computed,
+               COALESCE(TYPE_NAME(c.system_type_id), TYPE_NAME(c.user_type_id), N'')
         FROM sys.columns AS c
         WHERE c.object_id = @ObjectId
         ORDER BY c.column_id;
@@ -71,6 +77,7 @@ public sealed class SqlBulkWriter : ISqlBulkWriter
 
         var target = await ResolveTargetAsync(connection, targetTable, cancellationToken).ConfigureAwait(false);
         var plan = BuildColumnPlan(data, target, primaryKeyColumns);
+        EnsureKeysHaveValues(data, plan);
 
         // Generated name (no user input) – the '#' prefix makes it private to this connection/session.
         var quotedStaging = SqlIdentifier.Quote($"#TempStaging_{Guid.NewGuid():N}");
@@ -106,7 +113,8 @@ public sealed class SqlBulkWriter : ISqlBulkWriter
                 quotedStaging,
                 plan.Columns.Select(c => c.TargetName).ToList(),
                 plan.KeyColumns,
-                plan.DetectChanges);
+                plan.DetectChanges,
+                plan.Columns.Where(c => c.IsCharacter).Select(c => c.TargetName).ToList());
 
             await using var transaction = (SqlTransaction)await connection
                 .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
@@ -198,7 +206,7 @@ public sealed class SqlBulkWriter : ISqlBulkWriter
                 detectChanges = false;
             }
 
-            mapped.Add(new MappedColumn(sourceColumn.ColumnName, targetColumn.Name));
+            mapped.Add(new MappedColumn(sourceColumn.ColumnName, targetColumn.Name, CharacterTypes.Contains(targetColumn.TypeName)));
         }
 
         var keyColumns = new List<string>(primaryKeyColumns.Count);
@@ -216,6 +224,29 @@ public sealed class SqlBulkWriter : ISqlBulkWriter
         }
 
         return new ColumnPlan(mapped, keyColumns, detectChanges);
+    }
+
+    /// <summary>NULL never matches in the MERGE ON clause, so NULL keys would cause duplicates or PK violations.</summary>
+    private static void EnsureKeysHaveValues(DataTable data, ColumnPlan plan)
+    {
+        var keyOrdinals = plan.Columns
+            .Where(c => plan.KeyColumns.Contains(c.TargetName, StringComparer.OrdinalIgnoreCase))
+            .Select(c => (c.TargetName, Ordinal: data.Columns[c.SourceName]!.Ordinal))
+            .ToList();
+
+        foreach (DataRow row in data.Rows)
+        {
+            foreach (var (name, ordinal) in keyOrdinals)
+            {
+                if (row.IsNull(ordinal))
+                {
+                    throw new ArgumentException(
+                        $"Primary key column '{name}' contains NULL values (e.g. initial SAP dates). " +
+                        "Use other key columns or set SapSettings:ConvertAbapTypes to false.",
+                        "primaryKeyColumns");
+                }
+            }
+        }
     }
 
     private async Task ExecuteNonQueryAsync(SqlConnection connection, SqlTransaction? transaction, string sql, CancellationToken cancellationToken)
@@ -262,7 +293,7 @@ public sealed class SqlBulkWriter : ISqlBulkWriter
 
     private sealed record TargetTable(string QuotedName, IReadOnlyList<TargetColumn> Columns);
 
-    private sealed record MappedColumn(string SourceName, string TargetName);
+    private sealed record MappedColumn(string SourceName, string TargetName, bool IsCharacter);
 
     private sealed record ColumnPlan(IReadOnlyList<MappedColumn> Columns, IReadOnlyList<string> KeyColumns, bool DetectChanges);
 }

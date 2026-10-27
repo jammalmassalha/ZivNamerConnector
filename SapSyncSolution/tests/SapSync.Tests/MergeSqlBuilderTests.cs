@@ -22,6 +22,17 @@ public class MergeSqlBuilderTests
     }
 
     [Fact]
+    public void Build_ComparesCharacterColumnsWithBinaryCollation()
+    {
+        var sql = MergeSqlBuilder.Build(
+            "[dbo].[T]", "[#S]", new[] { "K", "MAKTX", "LABST" }, new[] { "K" }, detectChanges: true, characterColumns: new[] { "maktx" });
+
+        Assert.Contains(
+            "EXISTS (SELECT S.[MAKTX] COLLATE Latin1_General_BIN2, S.[LABST] EXCEPT SELECT T.[MAKTX] COLLATE Latin1_General_BIN2, T.[LABST])", sql);
+        Assert.Contains("UPDATE SET T.[MAKTX] = S.[MAKTX], T.[LABST] = S.[LABST]", sql);
+    }
+
+    [Fact]
     public void Build_WithoutChangeDetection_UpdatesAllMatchedRows()
     {
         var sql = MergeSqlBuilder.Build("[dbo].[T]", "[#S]", new[] { "K", "V" }, new[] { "K" }, detectChanges: false);
