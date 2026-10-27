@@ -24,7 +24,7 @@
   <ItemGroup>
     <!-- The real DDL script and table catalog, so tests verify they stay in sync. -->
     <None Include="..\..\database\*.sql" Link="database\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\src\SapSync.Api\appsettings.json" Link="api\appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\SapSync.Api\appsettings*.json" Link="api\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

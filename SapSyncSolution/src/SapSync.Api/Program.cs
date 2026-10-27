@@ -19,6 +19,10 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 builder.Services.AddOptions<SapSettings>()
     .Bind(builder.Configuration.GetSection(SapSettings.SectionName))
     .ValidateDataAnnotations()
+    // Test / Prod builds must get the SAP password from outside source control (env var SapSettings__Password).
+    .Validate(
+        settings => builder.Environment.IsDevelopment() || !string.IsNullOrEmpty(settings.Password),
+        "SapSettings:Password is not set. Supply it via the environment variable SapSettings__Password (or user-secrets).")
     .ValidateOnStart();
 
 builder.Services.AddOptions<SqlSettings>()

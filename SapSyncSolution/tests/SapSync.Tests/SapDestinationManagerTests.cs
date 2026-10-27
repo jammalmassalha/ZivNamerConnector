@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SAP.Middleware.Connector;
@@ -44,6 +45,43 @@ public class SapDestinationManagerTests
         Assert.Equal("12", parameters[RfcConfigParameters.PeakConnectionsLimit]);
         Assert.Equal("300", parameters[RfcConfigParameters.ConnectionIdleTimeout]);
         Assert.False(parameters.ContainsKey(RfcConfigParameters.MessageServerHost));
+    }
+
+    [Theory]
+    [InlineData("Test", "ZIT", "172.24.5.72")]
+    [InlineData("Production", "ZIP", "172.24.5.25")]
+    public void EnvironmentSettings_ProduceTheExpectedDestination(string environment, string destination, string host)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile(Path.Combine(AppContext.BaseDirectory, "api", "appsettings.json"))
+            .AddJsonFile(Path.Combine(AppContext.BaseDirectory, "api", $"appsettings.{environment}.json"))
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["SapSettings:Password"] = "from-env" })
+            .Build();
+        var settings = configuration.GetSection(SapSettings.SectionName).Get<SapSettings>()!;
+
+        var parameters = Create(settings).GetParameters(destination)!;
+
+        Assert.Equal(destination, parameters[RfcConfigParameters.Name]);
+        Assert.Equal(host, parameters[RfcConfigParameters.AppServerHost]);
+        Assert.Equal("00", parameters[RfcConfigParameters.SystemNumber]);
+        Assert.Equal("940", parameters[RfcConfigParameters.Client]);
+        Assert.Equal("bapiapp", parameters[RfcConfigParameters.User]);
+        Assert.Equal("from-env", parameters[RfcConfigParameters.Password]);
+        Assert.Equal("HE", parameters[RfcConfigParameters.Language]);
+        Assert.False(parameters.ContainsKey(RfcConfigParameters.SystemID)); // base "PRD" must not leak into Test/Prod
+    }
+
+    [Fact]
+    public void GetParameters_TrimsUserAndHost()
+    {
+        var settings = Settings();
+        settings.User = " bapiapp ";
+        settings.AppServerHost = " 172.24.5.25";
+
+        var parameters = Create(settings).GetParameters("SAP_TEST")!;
+
+        Assert.Equal("bapiapp", parameters[RfcConfigParameters.User]);
+        Assert.Equal("172.24.5.25", parameters[RfcConfigParameters.AppServerHost]);
     }
 
     [Fact]

@@ -50,8 +50,8 @@ Each SAP landscape has its own settings file, which overrides `appsettings.json`
 
 | Build value | ASP.NET Core environment | Settings file | Output |
 | --- | --- | --- | --- |
-| `Test` | `Test` | `appsettings.Test.json` (SAP QAS, test database) | `bin/Test/...`, `publish/Test/` |
-| `Prod` | `Production` | `appsettings.Production.json` (SAP PRD, production database) | `bin/Prod/...`, `publish/Prod/` |
+| `Test` | `Test` | `appsettings.Test.json` (SAP test system ZIT, test database) | `bin/Test/...`, `publish/Test/` |
+| `Prod` | `Production` | `appsettings.Production.json` (SAP production system ZIP, production database) | `bin/Prod/...`, `publish/Prod/` |
 
 Build or publish each environment separately:
 
@@ -70,6 +70,25 @@ An environment build works like this:
 Supply secrets per server through environment variables rather than the JSON files:
 - `SapSettings__Password`
 - `ConnectionStrings__SqlServer`
+
+SAP connection per environment:
+
+| | Test | Prod |
+| --- | --- | --- |
+| Destination (`DestinationName`) | `ZIT` | `ZIP` |
+| Application server (`AppServerHost`) | `172.24.5.72` (zisaptst) | `172.24.5.25` (zisapci) |
+| System number / client / language | `00` / `940` / `HE` | `00` / `940` / `HE` |
+| User | `bapiapp` | `bapiapp` |
+| Password | `SapSettings__Password` env var | `SapSettings__Password` env var |
+
+The SAP password is deliberately not stored in the repository. Test and Prod builds refuse to start
+(`SapSettings:Password is not set`) until it is supplied, e.g. on Windows / IIS:
+
+```powershell
+[Environment]::SetEnvironmentVariable("SapSettings__Password", "<password>", "Machine")
+```
+
+or for local runs: `dotnet user-secrets set "SapSettings:Password" "<password>" --project src/SapSync.Api`.
 
 During development, plain `dotnet build` and `dotnet run` work as before. Use `dotnet run --project src/SapSync.Api --launch-profile Test` (or `Prod`) to run locally against either landscape.
 
