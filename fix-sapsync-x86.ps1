@@ -16,7 +16,7 @@ Write-Host "Working directory: $(Get-Location)" -ForegroundColor Cyan
 
 # Step 1: Remove stale build artifacts
 Write-Host "`n[1/5] Removing stale build artifacts..." -ForegroundColor Yellow
-@(
+$foldersToRemove = @(
     ".\src\SapSync.Api\bin",
     ".\src\SapSync.Api\obj",
     ".\src\SapSync.Core\bin",
@@ -25,10 +25,12 @@ Write-Host "`n[1/5] Removing stale build artifacts..." -ForegroundColor Yellow
     ".\src\SapSync.Infrastructure\obj",
     ".\tests\SapSync.Tests\bin",
     ".\tests\SapSync.Tests\obj"
-) | ForEach-Object {
-    if (Test-Path $_) {
-        Write-Host "  Removing $_"
-        Remove-Item -Recurse -Force $_
+)
+
+foreach ($folder in $foldersToRemove) {
+    if (Test-Path $folder) {
+        Write-Host "  Removing $folder"
+        Remove-Item -Recurse -Force $folder
     }
 }
 
@@ -57,11 +59,11 @@ $requiredDlls = @(
 )
 
 $allFound = $true
-$requiredDlls | ForEach-Object {
-    if (Test-Path $_) {
-        Write-Host "  ✓ Found $_"
+foreach ($dll in $requiredDlls) {
+    if (Test-Path $dll) {
+        Write-Host "  [OK] $dll"
     } else {
-        Write-Host "  ✗ MISSING $_" -ForegroundColor Red
+        Write-Host "  [MISSING] $dll" -ForegroundColor Red
         $allFound = $false
     }
 }
@@ -73,10 +75,10 @@ if (-not $allFound) {
 
 # Step 5: Show architecture info
 Write-Host "`n[5/5] Architecture verification..." -ForegroundColor Yellow
-dotnet --info | Select-String "OS|Architecture|RID" | Write-Host
+dotnet --info | Select-String "OS|Architecture|RID"
 
 Write-Host "`n=== BUILD SUCCESSFUL ===" -ForegroundColor Green
 Write-Host "Next steps:"
 Write-Host "  1. In Visual Studio: Press F5 to run"
-Write-Host "  2. Or from command line: cd src\SapSync.Api && dotnet run"
+Write-Host "  2. Or from command line: cd src/SapSync.Api ; dotnet run"
 Write-Host ""
