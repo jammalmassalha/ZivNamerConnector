@@ -22,6 +22,7 @@
 	<Import Project="..\..\build\SapNco.props" Condition="Exists('..\..\build\SapNco.props')" />
 
 	<ItemGroup>
+		<PackageReference Include="SAPDotNetConnector3" Version="0.3.0" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
 		<PackageReference Include="System.ServiceModel.Http" Version="4.10.3" />
 		<PackageReference Include="System.ServiceModel.NetTcp" Version="4.10.3" />

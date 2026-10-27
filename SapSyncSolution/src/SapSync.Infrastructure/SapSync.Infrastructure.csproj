@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
+    <PackageReference Include="SAPDotNetConnector3" Version="0.3.0" />
     <PackageReference Include="System.ServiceModel.Http" Version="4.10.3" />
     <PackageReference Include="System.ServiceModel.NetTcp" Version="4.10.3" />
     <PackageReference Include="System.ServiceModel.Primitives" Version="4.10.3" />
