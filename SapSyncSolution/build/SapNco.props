@@ -1,0 +1,25 @@
+<Project>
+  <!--
+    SAP .NET Connector 3.1 (x64, .NET Core / .NET 5+ edition).
+    The binaries are licensed by SAP and not redistributable: download them from the SAP Support Portal and copy
+    sapnco.dll + sapnco_utils.dll into lib/sapnco, or build with: dotnet build -p:SapNcoPath=C:\path\to\nco\
+  -->
+  <PropertyGroup>
+    <SapNcoPath Condition="'$(SapNcoPath)' == ''">$(MSBuildThisFileDirectory)..\lib\sapnco\</SapNcoPath>
+    <!-- SapNcoPath may be a (read-only) global property, so normalize into a separate property. -->
+    <SapNcoDirectory>$([MSBuild]::EnsureTrailingSlash('$(SapNcoPath)'))</SapNcoDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="sapnco">
+      <HintPath>$(SapNcoDirectory)sapnco.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <!-- sapnco_utils.dll (and any other NCo dependency) is native code: copy it next to the application. -->
+    <None Include="$(SapNcoDirectory)*.dll" Exclude="$(SapNcoDirectory)sapnco.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="EnsureSapNcoPresent" BeforeTargets="ResolveAssemblyReferences" Condition="!Exists('$(SapNcoDirectory)sapnco.dll')">
+    <Error Text="SAP NCo 3.1 (x64) was not found at '$(SapNcoDirectory)'. Download SAP .NET Connector 3.1 for .NET (x64) from the SAP Support Portal and copy sapnco.dll and sapnco_utils.dll into that folder, or build with -p:SapNcoPath=&lt;folder&gt;." />
+  </Target>
+</Project>
