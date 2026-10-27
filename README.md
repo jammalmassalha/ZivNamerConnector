@@ -107,7 +107,7 @@ The pooling parameters are passed through to NCo.
 1. Resolves the target table through `OBJECT_ID` and `sys.columns`. This rejects unknown tables and columns, and every identifier is bracket-quoted.
 2. Clones the column definitions into `#TempStaging_{Guid}` with `SELECT TOP 0 <cols> INTO`. It clones only the synchronized columns, which avoids problems with identity, rowversion and defaulted columns.
 3. Streams the rows into the temp table with `SqlBulkCopy` (`SqlBulkCopyOptions.Default`, configured batch size).
-4. Runs a single `MERGE ... WITH (HOLDLOCK)` inside a transaction, matching on the composite key. The source is de-duplicated per key with `ROW_NUMBER()`, so duplicate SAP rows can never create duplicates or primary key violations. Rows are updated only when a value actually changed (NULL-safe `EXCEPT`).
+4. Runs a single `MERGE ... WITH (HOLDLOCK)` inside a transaction, matching on the composite key. The source is de-duplicated per key with `ROW_NUMBER()`, so duplicate SAP rows can never create duplicates or primary key violations. Rows are updated only when a value actually changed. The comparison is a NULL-safe `EXCEPT`, and text columns are compared with a binary collation so case-only changes are detected. NULL key values, such as initial SAP dates, are rejected.
 5. Commits, then drops the temp table.
 
 **Lifetimes**: `ISapDestinationManager` is a singleton. `ISapTableReader`, `ISqlBulkWriter` and `ISapSyncOrchestrator` are scoped.
@@ -115,3 +115,4 @@ The pooling parameters are passed through to NCo.
 **Notes**:
 - `RFC_READ_TABLE` returns at most 512 characters per row (`DATA_BUFFER_EXCEEDED` otherwise). Request fewer `fields` for wide tables.
 - The whole result is held in memory. Page large tables with `rowSkip` and `rowCount`.
+- **Security:** the endpoint has no authentication. Add authentication/authorization (e.g. `[Authorize]` with your identity provider) before exposing it. Grant the SQL login access only to the tables it should synchronize, and the SAP RFC user only to the tables it may read.

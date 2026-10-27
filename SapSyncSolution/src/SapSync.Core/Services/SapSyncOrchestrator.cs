@@ -24,6 +24,9 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // Request values are written to logs: strip line breaks to prevent log forging.
+        var sapTable = SanitizeForLog(request.TableName);
+        var targetTable = SanitizeForLog(request.TargetDbTable);
         var startedAt = DateTimeOffset.UtcNow;
         var total = Stopwatch.StartNew();
         long sapElapsedMs = 0, sqlElapsedMs = 0;
@@ -32,15 +35,15 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
 
         using var scope = _logger.BeginScope(new Dictionary<string, object>
         {
-            ["SapTable"] = request.TableName,
-            ["TargetTable"] = request.TargetDbTable,
+            ["SapTable"] = sapTable,
+            ["TargetTable"] = targetTable,
         });
 
         try
         {
             _logger.LogInformation(
                 "Starting SAP sync {SapTable} -> {TargetTable} (RowSkip={RowSkip}, RowCount={RowCount})",
-                request.TableName, request.TargetDbTable, request.RowSkip, request.RowCount);
+                sapTable, targetTable, request.RowSkip, request.RowCount);
 
             var stepWatch = Stopwatch.StartNew();
             using DataTable data = await _reader.ReadTableAsync(request, cancellationToken).ConfigureAwait(false);
@@ -49,7 +52,7 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
 
             _logger.LogInformation(
                 "Read {RowsRead} rows / {ColumnCount} columns from SAP table {SapTable} in {SapElapsedMs} ms",
-                rowsRead, data.Columns.Count, request.TableName, sapElapsedMs);
+                rowsRead, data.Columns.Count, sapTable, sapElapsedMs);
 
             var rowsProcessed = 0;
             if (rowsRead > 0)
@@ -63,16 +66,16 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
 
                 _logger.LogInformation(
                     "Upserted {RowsProcessed} rows into {TargetTable} in {SqlElapsedMs} ms",
-                    rowsProcessed, request.TargetDbTable, sqlElapsedMs);
+                    rowsProcessed, targetTable, sqlElapsedMs);
             }
             else
             {
-                _logger.LogInformation("No rows returned from SAP table {SapTable}; SQL upsert skipped", request.TableName);
+                _logger.LogInformation("No rows returned from SAP table {SapTable}; SQL upsert skipped", sapTable);
             }
 
             total.Stop();
             _logger.LogInformation(
-                "SAP sync {SapTable} -> {TargetTable} completed in {ElapsedMs} ms", request.TableName, request.TargetDbTable, total.ElapsedMilliseconds);
+                "SAP sync {SapTable} -> {TargetTable} completed in {ElapsedMs} ms", sapTable, targetTable, total.ElapsedMilliseconds);
 
             return new SyncResult
             {
@@ -90,7 +93,7 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning("SAP sync {SapTable} -> {TargetTable} was cancelled", request.TableName, request.TargetDbTable);
+            _logger.LogWarning("SAP sync {SapTable} -> {TargetTable} was cancelled", sapTable, targetTable);
             throw;
         }
         catch (Exception ex)
@@ -100,7 +103,7 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
             _logger.LogError(
                 ex,
                 "SAP sync {SapTable} -> {TargetTable} failed during {Stage} after {ElapsedMs} ms",
-                request.TableName, request.TargetDbTable, errorType, total.ElapsedMilliseconds);
+                sapTable, targetTable, errorType, total.ElapsedMilliseconds);
 
             return new SyncResult
             {
@@ -118,4 +121,7 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
             };
         }
     }
+
+    private static string SanitizeForLog(string? value) =>
+        (value ?? string.Empty).Replace("\r", string.Empty, StringComparison.Ordinal).Replace("\n", string.Empty, StringComparison.Ordinal);
 }
