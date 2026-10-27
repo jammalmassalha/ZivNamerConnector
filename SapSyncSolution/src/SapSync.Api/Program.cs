@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using SapSync.Api;
 using SapSync.Core.Interfaces;
 using SapSync.Core.Models;
 using SapSync.Core.Services;
@@ -6,7 +8,12 @@ using SapSync.Infrastructure.Sap;
 
 const string AngularCorsPolicy = "AngularClient";
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    // null for developer builds -> ASP.NET Core resolves the environment as usual.
+    EnvironmentName = BuildEnvironment.BakedEnvironment,
+});
 
 // Strongly typed, validated configuration.
 builder.Services.AddOptions<SapSettings>()
@@ -57,6 +64,22 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+var sapSettings = app.Services.GetRequiredService<IOptions<SapSettings>>().Value;
+app.Logger.LogInformation(
+    "Environment {Environment} (build: {BuildEnvironment}), SAP destination {SapDestination} on {SapHost} client {SapClient}",
+    app.Environment.EnvironmentName,
+    BuildEnvironment.BakedEnvironment ?? "developer",
+    sapSettings.DestinationName,
+    sapSettings.AppServerHost ?? sapSettings.MessageServerHost,
+    sapSettings.Client);
+
+if (BuildEnvironment.RuntimeOverrideIgnored)
+{
+    app.Logger.LogWarning(
+        "ASPNETCORE_ENVIRONMENT/DOTNET_ENVIRONMENT={RuntimeEnvironment} is ignored: this is a {BuildEnvironment} build",
+        BuildEnvironment.RuntimeEnvironment, BuildEnvironment.BakedEnvironment);
+}
 
 if (app.Environment.IsDevelopment())
 {

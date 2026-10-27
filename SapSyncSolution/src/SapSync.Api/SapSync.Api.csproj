@@ -9,6 +9,22 @@
     <UserSecretsId>sapsync-api-7c3f5d2e-4b1a-4e8f-9a6d-1f2e3d4c5b6a</UserSecretsId>
   </PropertyGroup>
 
+  <!--
+    SAP environment build:  dotnet build|publish -p:SapEnvironment=Test   (or Prod)
+      * output goes to bin\<SapEnvironment>\... (publish: publish\<SapEnvironment>\)
+      * only appsettings.json + appsettings.<Environment>.json are shipped
+      * the ASP.NET Core environment (Test / Production) is baked into the assembly
+    Without SapEnvironment the regular developer build is produced (all appsettings files, environment from launchSettings).
+  -->
+  <PropertyGroup Condition="'$(SapEnvironment)' != ''">
+    <SapEnvironmentName Condition="'$(SapEnvironment)' == 'Test'">Test</SapEnvironmentName>
+    <SapEnvironmentName Condition="'$(SapEnvironment)' == 'Prod'">Production</SapEnvironmentName>
+    <OutputPath>bin\$(SapEnvironment)\$(Configuration)\</OutputPath>
+    <PublishDir Condition="'$(PublishDir)' == '' Or '$(PublishDir)' == '$(OutputPath)publish\'">$(MSBuildProjectDirectory)\..\..\publish\$(SapEnvironment)\</PublishDir>
+    <!-- Sets ASPNETCORE_ENVIRONMENT in the generated web.config when hosted in IIS. -->
+    <EnvironmentName>$(SapEnvironmentName)</EnvironmentName>
+  </PropertyGroup>
+
   <Import Project="..\..\build\SapNco.props" />
 
   <ItemGroup>
@@ -19,5 +35,15 @@
     <ProjectReference Include="..\SapSync.Core\SapSync.Core.csproj" />
     <ProjectReference Include="..\SapSync.Infrastructure\SapSync.Infrastructure.csproj" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(SapEnvironmentName)' != ''">
+    <AssemblyMetadata Include="SapEnvironment" Value="$(SapEnvironmentName)" />
+    <Content Update="appsettings.*.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.$(SapEnvironmentName).json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="ValidateSapEnvironment" BeforeTargets="BeforeBuild" Condition="'$(SapEnvironment)' != '' And '$(SapEnvironmentName)' == ''">
+    <Error Text="Unknown SapEnvironment '$(SapEnvironment)'. Use -p:SapEnvironment=Test or -p:SapEnvironment=Prod." />
+  </Target>
 
 </Project>

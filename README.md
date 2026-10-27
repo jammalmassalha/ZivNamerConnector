@@ -18,7 +18,7 @@ SapSyncSolution/
 │   ├── SapSync.Infrastructure/
 │   │   ├── Sap/                     # SapDestinationManager, SapTableReader, OPTIONS splitter, type conversion
 │   │   └── Persistence/             # SqlBulkWriter, MergeSqlBuilder
-│   └── SapSync.Api/                 # SapSyncController, Program.cs (DI, CORS), appsettings.json
+│   └── SapSync.Api/                 # SapSyncController, Program.cs (DI, CORS), appsettings[.Test|.Production].json
 └── tests/SapSync.Tests/             # xUnit unit tests (+ opt-in SQL Server integration tests)
 ```
 
@@ -42,6 +42,35 @@ dotnet run --project src/SapSync.Api
 ```
 
 Set `SAPSYNC_TEST_SQL_CONNECTION` to a connection string for a scratch database to run the SQL Server integration tests.
+
+## SAP environments (Test / Prod)
+
+Each SAP landscape has its own settings file, which overrides `appsettings.json`:
+
+| Build value | ASP.NET Core environment | Settings file | Output |
+| --- | --- | --- | --- |
+| `Test` | `Test` | `appsettings.Test.json` (SAP QAS, test database) | `bin/Test/...`, `publish/Test/` |
+| `Prod` | `Production` | `appsettings.Production.json` (SAP PRD, production database) | `bin/Prod/...`, `publish/Prod/` |
+
+Build or publish each environment separately:
+
+```bash
+cd SapSyncSolution
+dotnet publish src/SapSync.Api -c Release -p:SapEnvironment=Test   # -> SapSyncSolution/publish/Test/
+dotnet publish src/SapSync.Api -c Release -p:SapEnvironment=Prod   # -> SapSyncSolution/publish/Prod/
+```
+
+An environment build works like this:
+- **Settings files:** it ships only `appsettings.json` plus its own environment file, so a Test package contains no production settings and vice versa.
+- **Locked environment:** the environment is baked into the assembly, so `ASPNETCORE_ENVIRONMENT` is ignored and a warning is logged if it disagrees. For IIS, it is also written to `web.config`.
+- **Startup log:** it logs the active environment and the SAP destination, host and client.
+- **Typos:** an unknown value (e.g. `-p:SapEnvironment=Staging`) fails the build.
+
+Supply secrets per server through environment variables rather than the JSON files:
+- `SapSettings__Password`
+- `ConnectionStrings__SqlServer`
+
+During development, plain `dotnet build` and `dotnet run` work as before. Use `dotnet run --project src/SapSync.Api --launch-profile Test` (or `Prod`) to run locally against either landscape.
 
 ## Configuration (`appsettings.json`)
 
