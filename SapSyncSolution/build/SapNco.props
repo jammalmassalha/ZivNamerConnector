@@ -22,4 +22,15 @@
   <Target Name="EnsureSapNcoPresent" BeforeTargets="ResolveAssemblyReferences" Condition="!Exists('$(SapNcoDirectory)sapnco.dll')">
     <Error Text="SAP NCo 3.1 (x64) was not found at '$(SapNcoDirectory)'. Download SAP .NET Connector 3.1 for .NET (x64) from the SAP Support Portal and copy sapnco.dll and sapnco_utils.dll into that folder, or build with -p:SapNcoPath=&lt;folder&gt;." />
   </Target>
+
+  <!-- NCo 3.0 (assembly version 3.0.x) targets .NET Framework only and fails at runtime on .NET 8. -->
+  <Target Name="EnsureSapNcoVersion" AfterTargets="EnsureSapNcoPresent" BeforeTargets="ResolveAssemblyReferences" Condition="Exists('$(SapNcoDirectory)sapnco.dll')">
+    <GetAssemblyIdentity AssemblyFiles="$(SapNcoDirectory)sapnco.dll">
+      <Output TaskParameter="Assemblies" ItemName="_SapNcoIdentity" />
+    </GetAssemblyIdentity>
+    <PropertyGroup>
+      <_SapNcoVersion>@(_SapNcoIdentity->'%(Version)')</_SapNcoVersion>
+    </PropertyGroup>
+    <Error Condition="!$(_SapNcoVersion.StartsWith('3.1.'))" Text="'$(SapNcoDirectory)sapnco.dll' is version $(_SapNcoVersion), but SAP NCo 3.1 for .NET (Core / .NET 5+, x64) is required. NCo 3.0 and the .NET Framework edition of NCo cannot be loaded by .NET 8. Replace sapnco.dll and sapnco_utils.dll with the NCo 3.1 .NET (Core) x64 binaries." />
+  </Target>
 </Project>
