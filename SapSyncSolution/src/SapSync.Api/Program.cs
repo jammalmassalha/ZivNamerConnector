@@ -48,9 +48,10 @@ builder.Services.AddOptions<SyncTablesSettings>()
     .ValidateOnStart();
 
 // SAP NCo allows exactly one destination configuration per process -> Singleton.
+// Register the concrete class and bind both possible interface abstractions to the exact same instance.
 builder.Services.AddSingleton<SapDestinationManager>();
-builder.Services.AddSingleton<ISapDestinationManager>(sp => sp.GetRequiredService<SapDestinationManager>());
 builder.Services.AddSingleton<IRfcDestinationProvider>(sp => sp.GetRequiredService<SapDestinationManager>());
+builder.Services.AddSingleton<ISapDestinationManager>(sp => sp.GetRequiredService<SapDestinationManager>());
 
 // Per-request units of work -> Scoped.
 builder.Services.AddScoped<ISapTableReader, SapTableReader>();

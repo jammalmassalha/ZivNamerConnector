@@ -56,7 +56,7 @@ public sealed class TableSyncService : ITableSyncService
                 PrimaryKeyColumns = definition.PrimaryKeyColumns.ToList(),
                 Fields = definition.Fields.Keys.ToList(),
                 ColumnMappings = new Dictionary<string, string>(definition.Fields, StringComparer.OrdinalIgnoreCase),
-                FilterCondition = filter,
+               // FilterCondition = filter,
                 RowSkip = rowsRead,
                 RowCount = count,
             };

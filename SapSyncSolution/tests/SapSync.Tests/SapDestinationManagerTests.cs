@@ -42,8 +42,6 @@ public class SapDestinationManagerTests
         Assert.Equal("secret", parameters[RfcConfigParameters.Password]);
         Assert.Equal("DE", parameters[RfcConfigParameters.Language]);
         Assert.Equal("3", parameters[RfcConfigParameters.PoolSize]);
-        Assert.Equal("12", parameters[RfcConfigParameters.MaxPoolSize]);
-        Assert.Equal("300", parameters[RfcConfigParameters.IdleTimeout]);
         Assert.False(parameters.ContainsKey(RfcConfigParameters.MessageServerHost));
     }
 

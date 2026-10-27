@@ -72,9 +72,7 @@ public sealed class SapDestinationManager : IRfcDestinationProvider, IDestinatio
             [RfcConfigParameters.User] = _settings.User.Trim(), // " bapiapp" would fail the SAP logon
             [RfcConfigParameters.Password] = _settings.Password,
             [RfcConfigParameters.Language] = _settings.Language,
-            [RfcConfigParameters.PoolSize] = _settings.PoolSize.ToString(CultureInfo.InvariantCulture),
-            [RfcConfigParameters.MaxPoolSize] = _settings.PeakConnectionsLimit.ToString(CultureInfo.InvariantCulture),
-            [RfcConfigParameters.IdleTimeout] = _settings.ConnectionIdleTimeout.ToString(CultureInfo.InvariantCulture),
+            [RfcConfigParameters.PoolSize] = _settings.PoolSize.ToString(CultureInfo.InvariantCulture)          
         };
 
         if (!string.IsNullOrWhiteSpace(_settings.AppServerHost))

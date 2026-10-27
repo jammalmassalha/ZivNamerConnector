@@ -1,49 +1,69 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <!-- SAP NCo 3.1 native binaries (sapnco_utils.dll) are x86 (32-bit). -->
-    <PlatformTarget>x86</PlatformTarget>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>sapsync-api-7c3f5d2e-4b1a-4e8f-9a6d-1f2e3d4c5b6a</UserSecretsId>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<OutputType>Exe</OutputType>
 
-  <!--
-    SAP environment build:  dotnet build|publish -p:SapEnvironment=Test   (or Prod)
-      * output goes to bin\<SapEnvironment>\... (publish: publish\<SapEnvironment>\)
-      * only appsettings.json + appsettings.<Environment>.json are shipped
-      * the ASP.NET Core environment (Test / Production) is baked into the assembly
-    Without SapEnvironment the regular developer build is produced (all appsettings files, environment from launchSettings).
-  -->
-  <PropertyGroup Condition="'$(SapEnvironment)' != ''">
-    <SapEnvironmentName Condition="'$(SapEnvironment)' == 'Test'">Test</SapEnvironmentName>
-    <SapEnvironmentName Condition="'$(SapEnvironment)' == 'Prod'">Production</SapEnvironmentName>
-    <OutputPath>bin\$(SapEnvironment)\$(Configuration)\</OutputPath>
-    <PublishDir Condition="'$(PublishDir)' == '' Or '$(PublishDir)' == '$(OutputPath)publish\'">$(MSBuildProjectDirectory)\..\..\publish\$(SapEnvironment)\</PublishDir>
-    <!-- Sets ASPNETCORE_ENVIRONMENT in the generated web.config when hosted in IIS. -->
-    <EnvironmentName>$(SapEnvironmentName)</EnvironmentName>
-  </PropertyGroup>
+		<!-- Target x64 to match SAP NCo 3.1 native unmanaged binaries -->
+		<PlatformTarget>x64</PlatformTarget>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>sapsync-api-7c3f5d2e-4b1a-4e8f-9a6d-1f2e3d4c5b6a</UserSecretsId>
 
-  <Import Project="..\..\build\SapNco.props" />
+		<!-- Prevents MSBuild from nesting binaries in non-standard subfolders so Visual Studio debugger can locate the executable -->
+		<AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
-  </ItemGroup>
+	<!-- Conditional output path only when explicitly building via CLI with -p:SapEnvironment=... -->
+	<PropertyGroup Condition="'$(SapEnvironment)' != ''">
+		<SapEnvironmentName Condition="'$(SapEnvironment)' == 'Test'">Test</SapEnvironmentName>
+		<SapEnvironmentName Condition="'$(SapEnvironment)' == 'Prod'">Production</SapEnvironmentName>
+		<OutputPath>bin\$(SapEnvironment)\$(Configuration)\</OutputPath>
+		<PublishDir Condition="'$(PublishDir)' == '' Or '$(PublishDir)' == '$(OutputPath)publish\'">$(MSBuildProjectDirectory)\..\..\publish\$(SapEnvironment)\</PublishDir>
+		<EnvironmentName>$(SapEnvironmentName)</EnvironmentName>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\SapSync.Core\SapSync.Core.csproj" />
-    <ProjectReference Include="..\SapSync.Infrastructure\SapSync.Infrastructure.csproj" />
-  </ItemGroup>
+	<!-- Import build props if existing -->
+	<Import Project="..\..\build\SapNco.props" Condition="Exists('..\..\build\SapNco.props')" />
 
-  <ItemGroup Condition="'$(SapEnvironmentName)' != ''">
-    <AssemblyMetadata Include="SapEnvironment" Value="$(SapEnvironmentName)" />
-    <Content Update="appsettings.*.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
-    <Content Update="appsettings.$(SapEnvironmentName).json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+		<PackageReference Include="System.ServiceModel.Http" Version="4.10.3" />
+		<PackageReference Include="System.ServiceModel.NetTcp" Version="4.10.3" />
+		<PackageReference Include="System.ServiceModel.Primitives" Version="4.10.3" />
+	</ItemGroup>
 
-  <Target Name="ValidateSapEnvironment" BeforeTargets="BeforeBuild" Condition="'$(SapEnvironment)' != '' And '$(SapEnvironmentName)' == ''">
-    <Error Text="Unknown SapEnvironment '$(SapEnvironment)'. Use -p:SapEnvironment=Test or -p:SapEnvironment=Prod." />
-  </Target>
+	<ItemGroup>
+		<ProjectReference Include="..\SapSync.Core\SapSync.Core.csproj" />
+		<ProjectReference Include="..\SapSync.Infrastructure\SapSync.Infrastructure.csproj" />
+	</ItemGroup>
+
+	<!-- Multi-environment appsettings inclusion -->
+	<ItemGroup Condition="'$(SapEnvironmentName)' != ''">
+		<AssemblyMetadata Include="SapEnvironment" Value="$(SapEnvironmentName)" />
+		<Content Update="appsettings.*.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+		<Content Update="appsettings.$(SapEnvironmentName).json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<!-- Direct reference to SAP NCo assemblies and copying all native C++ dependencies to the output directory -->
+	<ItemGroup>
+		<Reference Include="sapnco">
+			<HintPath>libs\sapnco.dll</HintPath>
+			<Private>True</Private>
+		</Reference>
+		<Reference Include="sapnco_utils">
+			<HintPath>libs\sapnco_utils.dll</HintPath>
+			<Private>True</Private>
+		</Reference>
+		<None Include="libs\*.dll">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<Visible>true</Visible>
+		</None>
+	</ItemGroup>
+
+	<Target Name="ValidateSapEnvironment" BeforeTargets="BeforeBuild" Condition="'$(SapEnvironment)' != '' And '$(SapEnvironmentName)' == ''">
+		<Error Text="Unknown SapEnvironment '$(SapEnvironment)'. Use -p:SapEnvironment=Test or -p:SapEnvironment=Prod." />
+	</Target>
 
 </Project>
