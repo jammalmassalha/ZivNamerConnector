@@ -45,6 +45,9 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
                 "Starting SAP sync {SapTable} -> {TargetTable} (RowSkip={RowSkip}, RowCount={RowCount})",
                 sapTable, targetTable, request.RowSkip, request.RowCount);
 
+            // Validate mappings before calling SAP so configuration errors fail fast.
+            ColumnMapper.Validate(request.ColumnMappings);
+
             var stepWatch = Stopwatch.StartNew();
             using DataTable data = await _reader.ReadTableAsync(request, cancellationToken).ConfigureAwait(false);
             sapElapsedMs = stepWatch.ElapsedMilliseconds;
@@ -53,6 +56,8 @@ public sealed class SapSyncOrchestrator : ISapSyncOrchestrator
             _logger.LogInformation(
                 "Read {RowsRead} rows / {ColumnCount} columns from SAP table {SapTable} in {SapElapsedMs} ms",
                 rowsRead, data.Columns.Count, sapTable, sapElapsedMs);
+
+            ColumnMapper.Apply(data, request.ColumnMappings);
 
             var rowsProcessed = 0;
             if (rowsRead > 0)

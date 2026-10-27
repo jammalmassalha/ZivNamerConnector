@@ -23,6 +23,12 @@ public sealed class SapQueryRequest
     /// <summary>Optional SAP field list. When empty, all fields of the table are read.</summary>
     public List<string>? Fields { get; set; }
 
+    /// <summary>
+    /// Optional SAP field → SQL column renames (e.g. "PATNR" → "PATIENTID"), applied before the upsert.
+    /// <see cref="PrimaryKeyColumns"/> refer to the SQL column names.
+    /// </summary>
+    public Dictionary<string, string>? ColumnMappings { get; set; }
+
     /// <summary>Optional ABAP WHERE clause, e.g. "MTART = 'FERT' AND ERSDA >= '20240101'".</summary>
     [MaxLength(8000)]
     public string? FilterCondition { get; set; }

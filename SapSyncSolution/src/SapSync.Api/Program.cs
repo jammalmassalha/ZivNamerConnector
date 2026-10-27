@@ -34,6 +34,14 @@ builder.Services.AddOptions<SqlSettings>()
     .Validate(settings => !string.IsNullOrWhiteSpace(settings.ConnectionString), "A SQL Server connection string is required.")
     .ValidateOnStart();
 
+builder.Services.AddOptions<SyncTablesSettings>()
+    .Bind(builder.Configuration.GetSection(SyncTablesSettings.SectionName))
+    .Validate(
+        settings => settings.Tables.Values.All(t =>
+            !string.IsNullOrWhiteSpace(t.TargetDbTable) && t.PrimaryKeyColumns.Count > 0 && t.Fields.Count > 0 && t.PageSize > 0),
+        $"Every {SyncTablesSettings.SectionName} table needs TargetDbTable, PrimaryKeyColumns, Fields and a positive PageSize.")
+    .ValidateOnStart();
+
 // SAP NCo allows exactly one destination configuration per process -> Singleton.
 builder.Services.AddSingleton<SapDestinationManager>();
 builder.Services.AddSingleton<ISapDestinationManager>(sp => sp.GetRequiredService<SapDestinationManager>());
@@ -43,6 +51,7 @@ builder.Services.AddSingleton<IRfcDestinationProvider>(sp => sp.GetRequiredServi
 builder.Services.AddScoped<ISapTableReader, SapTableReader>();
 builder.Services.AddScoped<ISqlBulkWriter, SqlBulkWriter>();
 builder.Services.AddScoped<ISapSyncOrchestrator, SapSyncOrchestrator>();
+builder.Services.AddScoped<ITableSyncService, TableSyncService>();
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
 if (allowedOrigins is not { Length: > 0 })

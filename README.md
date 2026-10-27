@@ -8,6 +8,7 @@ for an Angular frontend on `http://localhost:4200`.
 
 ```text
 SapSyncSolution/
+├── database/01_CreateTables.sql     # target tables sap.NPAT / NFAL / NBEW / ZNACCIDENT / ZNMCICASE
 ├── build/SapNco.props               # shared SAP NCo reference (x64) + friendly "missing NCo" error
 ├── lib/sapnco/                      # put sapnco.dll + sapnco_utils.dll here (not committed, SAP licensed)
 ├── src/
@@ -79,6 +80,7 @@ During development, plain `dotnet build` and `dotnet run` work as before. Use `d
 | `ConnectionStrings:SqlServer` | Target database (name configurable via `SqlSettings:ConnectionStringName`). |
 | `SapSettings` | Logon: `AppServerHost` **or** `MessageServerHost` + `LogonGroup` + `SystemId`, plus `SystemNumber`, `Client`, `User`, `Password` (use user-secrets / env var `SapSettings__Password`), `Language`, `SapRouter`. Pooling: `PoolSize`, `PeakConnectionsLimit`, `ConnectionIdleTimeout` (seconds). `ConvertAbapTypes` (default `true`) maps D/T/P/I/F to `date`/`time`/`decimal`/`int`/`float`; set `false` if the target stores SAP values as text. |
 | `SqlSettings` | `BulkCopyBatchSize` (5,000–10,000), `BulkCopyTimeoutSeconds`, `CommandTimeoutSeconds`. |
+| `SyncTables:Tables` | Catalog of predefined syncs (see [SAP IS-H tables](#sap-is-h-tables-namer)): `SapTableName` (defaults to the key), `TargetDbTable`, `PrimaryKeyColumns` (SQL names), `Fields` (SAP field → SQL column), optional `FilterCondition`, `PageSize`. |
 | `Cors:AllowedOrigins` | Angular origins (default `http://localhost:4200`); credentials, all methods and headers allowed. |
 
 Settings are validated at startup (`ValidateDataAnnotations` + `ValidateOnStart`).
@@ -120,6 +122,41 @@ Response (`SyncResult`):
 
 Status codes: `200` success, `400` invalid request (`errorType: "Validation"`), `502` SAP failure
 (`"SapRead"`), `500` SQL failure (`"SqlWrite"`).
+
+## SAP IS-H tables (Namer)
+
+1. Create the tables once per database (Test and Prod): run `SapSyncSolution/database/01_CreateTables.sql`
+   (idempotent; creates schema `sap`).
+2. Sync via the API – the field list, column names and keys come from `SyncTables` in `appsettings.json`.
+
+| SAP table | SQL table | Key (SQL) | Columns (SAP field → SQL column) |
+| --- | --- | --- | --- |
+| NPAT – מטופלים | `sap.NPAT` | `PATIENTID` | PATNR→PATIENTID, EXTNR→ID_NUMBER, NNAME→LAST_NAME_PAT, VNAME→FRST_NAME_PAT, GSCHL→SEX, GBDAT→DOB, GLAND→BIRTHCTRY, FAMST→MAR_STAT, KONFE→REL_DENOM, TODDT→DT_O_DEATH_FROM, ORT→CITY, TELF1→PHONE, ZNKUPA_NOZZ→HMO |
+| NFAL – מקרים | `sap.NFAL` | `PATCASEID` | FALNR→PATCASEID, PATNR→PATIENTID, FALAR→CASETYPE, ERDAT→CREATION_DATE, STUSR→CANCEL_USER, STDAT→CANCEL_DATE |
+| NBEW – תזוזת מקרים | `sap.NBEW` | `PATCASEID, MOVEMNT_SEQNO` | FALNR→PATCASEID, LFDNR→MOVEMNT_SEQNO, BWIDT→MOVEMNT_DATE, BWIZT→MOVEMNT_TIME, BEWTY→MOVEMNT_CTGRY, UNFNR→ACCIDENT_NO, ORGFA→DEPARTMENT, ORGPF→NURS_TREAT_OU, STDAT→CANCEL_DATE, STUSR→CANCEL_USER |
+| ZNACCIDENT – אירועים | `sap.ZNACCIDENT` | `ACCIDENT_NO` | UNFNR→ACCIDENT_NO, UNFKZ→ACCIDENT, ZNMCI→MCI, ZNUNFDT2→ACCIDENT_DATE, ZUNFZT2→ACCIDENT_TIME, ZNENDDATE→END_DATE, ZNENDTIME→END_TIME |
+| ZNMCICASE – מקרים באירוע | `sap.ZNMCICASE` | `ACCIDENT_NO, PATCASEID` | UNFNR→ACCIDENT_NO, FALNR→PATCASEID, ZNMAININJURY→MAIN_INJURY, ZNMEDSTATUS→MEDICAL_STATUS |
+
+Types: CHAR/NUMC → `NVARCHAR(n)` (Hebrew; NUMC keeps leading zeros), DATS → `DATE`, TIMS → `TIME(0)`; empty SAP
+dates (`00000000`) are stored as `NULL`. No foreign keys, so tables can be synced in any order or partially.
+
+Endpoints:
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/sapsync/tables` | Configured table names. |
+| `POST /api/sapsync/tables/{name}/sync` | Sync one table page by page (`PageSize` rows per RFC call / MERGE transaction). Optional body: `{ "filterCondition": "ERDAT >= '20260101'", "maxRows": 0, "pageSize": 0 }`. Returns `TableSyncResult` (pages, rowsRead, rowsProcessed, elapsedMs, error, per-page `SyncResult`s); `404` for unknown names. |
+| `POST /api/sapsync/tables/sync-all` | Sync all configured tables; `200` if all succeed, otherwise `207` with per-table results. |
+
+Notes / assumptions to verify against your SAP system:
+
+* **Keys** – in standard IS-H, NFAL and NBEW are also keyed by `EINRI` (institution). With a single institution the
+  keys above are unique; otherwise add `"EINRI": "EINRI"` to `Fields`, the column to the script and to `PrimaryKeyColumns`.
+  The ZNMCICASE key (`UNFNR + FALNR`) is assumed – adjust if the Z-table's key differs.
+* **`ZUNFZT2`** (event time in ZNACCIDENT) is used exactly as listed; if the field is actually `ZNUNFZT2`, change the
+  key in `SyncTables:Tables:ZNACCIDENT:Fields`.
+* **Large tables** – `RFC_READ_TABLE` re-reads skipped rows for each page, so for regular runs prefer a delta filter
+  (e.g. `ERDAT >= '20260101'` on NFAL, `BWIDT >= ...` on NBEW) over full reloads.
 
 ## How it works
 
