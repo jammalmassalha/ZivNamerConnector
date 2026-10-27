@@ -73,8 +73,8 @@ public sealed class SapDestinationManager : IRfcDestinationProvider, IDestinatio
             [RfcConfigParameters.Password] = _settings.Password,
             [RfcConfigParameters.Language] = _settings.Language,
             [RfcConfigParameters.PoolSize] = _settings.PoolSize.ToString(CultureInfo.InvariantCulture),
-            [RfcConfigParameters.PeakConnectionsLimit] = _settings.PeakConnectionsLimit.ToString(CultureInfo.InvariantCulture),
-            [RfcConfigParameters.ConnectionIdleTimeout] = _settings.ConnectionIdleTimeout.ToString(CultureInfo.InvariantCulture),
+            [RfcConfigParameters.MaxPoolSize] = _settings.PeakConnectionsLimit.ToString(CultureInfo.InvariantCulture),
+            [RfcConfigParameters.IdleTimeout] = _settings.ConnectionIdleTimeout.ToString(CultureInfo.InvariantCulture),
         };
 
         if (!string.IsNullOrWhiteSpace(_settings.AppServerHost))
