@@ -1,6 +1,6 @@
 # SAP .NET Connector 3.1 binaries
 
-Copy the **x64** SAP NCo 3.1 for .NET (Core / .NET 5+) binaries here:
+Copy the **x86 (32-bit)** SAP NCo 3.1 for .NET (Core / .NET 5+) binaries here:
 
 - `sapnco.dll`
 - `sapnco_utils.dll`
