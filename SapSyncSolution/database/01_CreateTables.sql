@@ -8,13 +8,13 @@
 SET NOCOUNT ON;
 GO
 
-IF SCHEMA_ID(N'sap') IS NULL
-    EXEC (N'CREATE SCHEMA [sap] AUTHORIZATION [dbo];');
+IF SCHEMA_ID(N'dbo') IS NULL
+    EXEC (N'CREATE SCHEMA [dbo] AUTHORIZATION [dbo];');
 GO
 
 /* NPAT - טבלת המטופלים (patients) */
-IF OBJECT_ID(N'[sap].[NPAT]', N'U') IS NULL
-CREATE TABLE [sap].[NPAT]
+IF OBJECT_ID(N'[dbo].[NPAT]', N'U') IS NULL
+CREATE TABLE [dbo].[NPAT]
 (
     [PATIENTID]       NVARCHAR(10) NOT NULL,   -- PATNR       מספר מטופל
     [ID_NUMBER]       NVARCHAR(20) NULL,       -- EXTNR       מספר זהות
@@ -32,13 +32,13 @@ CREATE TABLE [sap].[NPAT]
     CONSTRAINT [PK_sap_NPAT] PRIMARY KEY CLUSTERED ([PATIENTID])
 );
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_NPAT_ID_NUMBER' AND object_id = OBJECT_ID(N'[sap].[NPAT]'))
-    CREATE INDEX [IX_sap_NPAT_ID_NUMBER] ON [sap].[NPAT] ([ID_NUMBER]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_NPAT_ID_NUMBER' AND object_id = OBJECT_ID(N'[dbo].[NPAT]'))
+    CREATE INDEX [IX_sap_NPAT_ID_NUMBER] ON [dbo].[NPAT] ([ID_NUMBER]);
 GO
 
 /* NFAL - טבלת המקרים (cases) */
-IF OBJECT_ID(N'[sap].[NFAL]', N'U') IS NULL
-CREATE TABLE [sap].[NFAL]
+IF OBJECT_ID(N'[dbo].[NFAL]', N'U') IS NULL
+CREATE TABLE [dbo].[NFAL]
 (
     [PATCASEID]     NVARCHAR(10) NOT NULL,     -- FALNR מספר מקרה
     [PATIENTID]     NVARCHAR(10) NULL,         -- PATNR מספר מטופל
@@ -49,13 +49,13 @@ CREATE TABLE [sap].[NFAL]
     CONSTRAINT [PK_sap_NFAL] PRIMARY KEY CLUSTERED ([PATCASEID])
 );
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_NFAL_PATIENTID' AND object_id = OBJECT_ID(N'[sap].[NFAL]'))
-    CREATE INDEX [IX_sap_NFAL_PATIENTID] ON [sap].[NFAL] ([PATIENTID]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_NFAL_PATIENTID' AND object_id = OBJECT_ID(N'[dbo].[NFAL]'))
+    CREATE INDEX [IX_sap_NFAL_PATIENTID] ON [dbo].[NFAL] ([PATIENTID]);
 GO
 
 /* NBEW - תזוזת המקרים (case movements) */
-IF OBJECT_ID(N'[sap].[NBEW]', N'U') IS NULL
-CREATE TABLE [sap].[NBEW]
+IF OBJECT_ID(N'[dbo].[NBEW]', N'U') IS NULL
+CREATE TABLE [dbo].[NBEW]
 (
     [PATCASEID]     NVARCHAR(10) NOT NULL,     -- FALNR מספר מקרה
     [MOVEMNT_SEQNO] NVARCHAR(5)  NOT NULL,     -- LFDNR מספר סידורי של תנועה (NUMC, leading zeros kept)
@@ -70,13 +70,13 @@ CREATE TABLE [sap].[NBEW]
     CONSTRAINT [PK_sap_NBEW] PRIMARY KEY CLUSTERED ([PATCASEID], [MOVEMNT_SEQNO])
 );
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_NBEW_ACCIDENT_NO' AND object_id = OBJECT_ID(N'[sap].[NBEW]'))
-    CREATE INDEX [IX_sap_NBEW_ACCIDENT_NO] ON [sap].[NBEW] ([ACCIDENT_NO]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_NBEW_ACCIDENT_NO' AND object_id = OBJECT_ID(N'[dbo].[NBEW]'))
+    CREATE INDEX [IX_sap_NBEW_ACCIDENT_NO] ON [dbo].[NBEW] ([ACCIDENT_NO]);
 GO
 
 /* ZNACCIDENT - טבלת האירועים (events / accidents) */
-IF OBJECT_ID(N'[sap].[ZNACCIDENT]', N'U') IS NULL
-CREATE TABLE [sap].[ZNACCIDENT]
+IF OBJECT_ID(N'[dbo].[ZNACCIDENT]', N'U') IS NULL
+CREATE TABLE [dbo].[ZNACCIDENT]
 (
     [ACCIDENT_NO]   NVARCHAR(12) NOT NULL,     -- UNFNR    מספר ארוע
     [ACCIDENT]      NVARCHAR(3)  NULL,         -- UNFKZ    סוג תאונה
@@ -90,8 +90,8 @@ CREATE TABLE [sap].[ZNACCIDENT]
 GO
 
 /* ZNMCICASE - טבלת מקרים באירוע (cases per event) */
-IF OBJECT_ID(N'[sap].[ZNMCICASE]', N'U') IS NULL
-CREATE TABLE [sap].[ZNMCICASE]
+IF OBJECT_ID(N'[dbo].[ZNMCICASE]', N'U') IS NULL
+CREATE TABLE [dbo].[ZNMCICASE]
 (
     [ACCIDENT_NO]    NVARCHAR(12) NOT NULL,    -- UNFNR        מספר קובץ / אירוע
     [PATCASEID]      NVARCHAR(10) NOT NULL,    -- FALNR        מספר מקרה
@@ -100,6 +100,6 @@ CREATE TABLE [sap].[ZNMCICASE]
     CONSTRAINT [PK_sap_ZNMCICASE] PRIMARY KEY CLUSTERED ([ACCIDENT_NO], [PATCASEID])
 );
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_ZNMCICASE_PATCASEID' AND object_id = OBJECT_ID(N'[sap].[ZNMCICASE]'))
-    CREATE INDEX [IX_sap_ZNMCICASE_PATCASEID] ON [sap].[ZNMCICASE] ([PATCASEID]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_ZNMCICASE_PATCASEID' AND object_id = OBJECT_ID(N'[dbo].[ZNMCICASE]'))
+    CREATE INDEX [IX_sap_ZNMCICASE_PATCASEID] ON [dbo].[ZNMCICASE] ([PATCASEID]);
 GO

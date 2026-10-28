@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -22,11 +22,8 @@
 	<Import Project="..\..\build\SapNco.props" Condition="Exists('..\..\build\SapNco.props')" />
 
 	<ItemGroup>
-		<PackageReference Include="SAPDotNetConnector3" Version="0.3.0" />
+		<PackageReference Include="SAP_DotNetConnector3_Net40_x64" Version="3.0.18" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
-		<PackageReference Include="System.ServiceModel.Http" Version="4.10.3" />
-		<PackageReference Include="System.ServiceModel.NetTcp" Version="4.10.3" />
-		<PackageReference Include="System.ServiceModel.Primitives" Version="4.10.3" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -41,21 +38,7 @@
 		<Content Update="appsettings.$(SapEnvironmentName).json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
 	</ItemGroup>
 
-	<!-- Direct reference to SAP NCo assemblies and copying all native C++ dependencies to the output directory -->
-	<ItemGroup>
-		<Reference Include="sapnco">
-			<HintPath>libs\sapnco.dll</HintPath>
-			<Private>True</Private>
-		</Reference>
-		<Reference Include="sapnco_utils">
-			<HintPath>libs\sapnco_utils.dll</HintPath>
-			<Private>True</Private>
-		</Reference>
-		<None Include="libs\*.dll">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-			<Visible>true</Visible>
-		</None>
-	</ItemGroup>
+
 
 	<Target Name="ValidateSapEnvironment" BeforeTargets="BeforeBuild" Condition="'$(SapEnvironment)' != '' And '$(SapEnvironmentName)' == ''">
 		<Error Text="Unknown SapEnvironment '$(SapEnvironment)'. Use -p:SapEnvironment=Test or -p:SapEnvironment=Prod." />
