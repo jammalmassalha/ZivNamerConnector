@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using SapSync.Api;
+using SapSync.Api.Hubs;
 using SapSync.Core.Interfaces;
 using SapSync.Core.Models;
 using SapSync.Core.Services;
@@ -57,6 +58,14 @@ builder.Services.AddScoped<ISqlBulkWriter, SqlBulkWriter>();
 builder.Services.AddScoped<ISapSyncOrchestrator, SapSyncOrchestrator>();
 builder.Services.AddScoped<ITableSyncService, TableSyncService>();
 
+// ARAN (Multi-Casualty Incident) synchronization service -> Scoped.
+builder.Services.AddScoped(sp =>
+{
+    var sqlSettings = sp.GetRequiredService<IOptions<SqlSettings>>().Value;
+    var hubContext = sp.GetRequiredService<IHubContext<AranHub>>();
+    return new AranSyncService(sqlSettings.ConnectionString!, hubContext);
+});
+
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
 if (allowedOrigins is not { Length: > 0 })
 {
@@ -71,6 +80,9 @@ builder.Services.AddCors(options =>
         .AllowAnyMethod()
         .AllowAnyHeader());
 });
+
+// SignalR for real-time ARAN event broadcasting.
+builder.Services.AddSignalR();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -104,6 +116,7 @@ app.UseHttpsRedirection();
 app.UseCors(AngularCorsPolicy);
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<AranHub>("/hubs/aran");
 
 app.Run();
 
