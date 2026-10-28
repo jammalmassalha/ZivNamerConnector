@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using SapSync.Api;
 using SapSync.Api.Hubs;
+using SapSync.Api.Services;
 using SapSync.Core.Interfaces;
 using SapSync.Core.Models;
 using SapSync.Core.Services;

@@ -255,10 +255,10 @@ public sealed class AranSyncService
         return new
         {
             Total = total,
-            Red,
-            Yellow,
-            Green,
-            Black,
+            Red = "red",
+            Yellow = "yellow",
+            Green = "green",
+            Black = "black",
             InTreatment = inTreatment,
             Discharged = discharged
         };
