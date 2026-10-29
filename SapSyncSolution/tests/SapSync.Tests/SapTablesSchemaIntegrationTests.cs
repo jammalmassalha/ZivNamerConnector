@@ -105,6 +105,7 @@ public sealed class SapTablesSchemaIntegrationTests : IAsyncLifetime
         var sources = new Queue<DataTable>(new[] { npat, npat.Copy(), nbew });
         var service = new TableSyncService(
             new SapSyncOrchestrator(new QueueReader(sources), CreateWriter(), NullLogger<SapSyncOrchestrator>.Instance),
+            new DeltaSyncFilterBuilder(NullLogger<DeltaSyncFilterBuilder>.Instance),
             Options.Create(catalog),
             NullLogger<TableSyncService>.Instance);
 

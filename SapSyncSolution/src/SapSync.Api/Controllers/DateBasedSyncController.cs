@@ -203,7 +203,7 @@ public sealed class DateBasedSyncController : ControllerBase
                         Name = tableName,
                         Success = false,
                         ErrorMessage = ex.Message,
-                        ErrorType = SyncErrorTypes.UnexpectedError
+                        ErrorType = SyncErrorTypes.SapRead
                     });
                 }
             }
