@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Subscription, catchError, exhaustMap, filter, of, timer } from 'rxjs';
+import { Subscription, catchError, exhaustMap, filter, of, tap, timer } from 'rxjs';
 import { Casualty, KpiSummary } from '../models/aran.models';
 import { environment } from '../../../environments/environment';
 
@@ -93,6 +93,7 @@ export class AranPollingService implements OnDestroy {
         search: this.search || null,
       })
       .pipe(
+        tap((res) => console.log('[AranPolling] response for', requested, res)),
         catchError((err) => {
           console.error('Polling failed:', err);
           return of(null);
