@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using SapSync.Api.Services;
 using SapSync.Core.Interfaces;
 using SapSync.Core.Models;
+using System.Globalization;
 
 namespace SapSync.Api.Controllers;
 
@@ -33,6 +34,57 @@ public sealed class AranController : ControllerBase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sqlConnectionString = configuration.GetConnectionString("SqlServer")
             ?? throw new InvalidOperationException("SqlServer connection string is not configured.");
+    }
+
+    [HttpGet("accidents/latest")]
+    [ProducesResponseType(typeof(AranDashboardPayloadDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AranDashboardPayloadDto>> GetLatestAccidents(CancellationToken cancellationToken)
+    {
+        var incidents = new List<IncidentOptionDto>();
+        await using (var conn = new Microsoft.Data.SqlClient.SqlConnection(_sqlConnectionString))
+        {
+            await conn.OpenAsync(cancellationToken);
+            const string sql = @"
+                SELECT TOP (10) ACCIDENT_NO, ACCIDENT_PLACE, ACCIDENT_DATE, ACCIDENT_TIME
+                FROM [dbo].[ZNACCIDENT]
+                ORDER BY ACCIDENT_DATE DESC, ACCIDENT_TIME DESC, ACCIDENT_NO DESC";
+            await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                incidents.Add(new IncidentOptionDto
+                {
+                    AccidentNo = reader.GetString(0).Trim(),
+                    AccidentPlace = reader.IsDBNull(1) ? null : reader.GetString(1).Trim(),
+                    AccidentDate = reader.IsDBNull(2) ? null : reader.GetDateTime(2),
+                    AccidentTime = reader.IsDBNull(3) ? null : reader.GetTimeSpan(3)
+                });
+            }
+        }
+
+        var selectedIncident = incidents.FirstOrDefault();
+        var cases = selectedIncident is null
+            ? new List<AranPatientCaseDto>()
+            : await QueryIncidentCasesAsync(selectedIncident.AccidentNo, cancellationToken);
+
+        return Ok(new AranDashboardPayloadDto
+        {
+            Incidents = incidents,
+            SelectedIncident = selectedIncident,
+            Cases = cases
+        });
+    }
+
+    [HttpGet("accidents/{accidentNo}/cases")]
+    [ProducesResponseType(typeof(IEnumerable<AranPatientCaseDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<AranPatientCaseDto>>> GetAccidentCases(
+        string accidentNo,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(accidentNo))
+            return BadRequest(new { error = "accidentNo is required" });
+
+        return Ok(await QueryIncidentCasesAsync(accidentNo.Trim(), cancellationToken));
     }
 
     /// <summary>
@@ -321,12 +373,110 @@ public sealed class AranController : ControllerBase
     private static string? NormalizeTriage(string? value) =>
         value?.Trim().ToUpperInvariant() switch
         {
-            "RED" => "RED",
-            "YELLOW" => "YELLOW",
-            "GREEN" => "GREEN",
-            "BLACK" => "BLACK",
+            "1" or "T1" or "RED" => "RED",
+            "2" or "T2" or "YELLOW" => "YELLOW",
+            "3" or "T3" or "GREEN" => "GREEN",
+            "4" or "BLACK" => "BLACK",
             _ => null
         };
+
+    private async Task<List<AranPatientCaseDto>> QueryIncidentCasesAsync(
+        string accidentNo,
+        CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            SELECT
+                c.PATCASEID, f.PATIENTID, p.ID_NUMBER, p.FRST_NAME_PAT, p.LAST_NAME_PAT, p.DOB,
+                c.MAIN_INJURY, c.MEDICAL_STATUS,
+                m.MOVEMNT_SEQNO, m.MOVEMNT_CTGRY, m.MOVEMENT_TYPE, m.MOVEMNT_DATE, m.MOVEMNT_TIME,
+                m.DEPARTMENT, m.NURS_TREAT_OU
+            FROM [dbo].[ZNMCICASE] c
+            INNER JOIN [dbo].[NFAL] f ON f.PATCASEID = c.PATCASEID
+            LEFT JOIN [dbo].[NPAT] p ON p.PATIENTID = f.PATIENTID
+            LEFT JOIN [dbo].[NBEW] m ON m.PATCASEID = c.PATCASEID
+            WHERE LTRIM(RTRIM(c.ACCIDENT_NO)) = @AccidentNo
+            ORDER BY c.PATCASEID, TRY_CONVERT(int, m.MOVEMNT_SEQNO), m.MOVEMNT_SEQNO";
+
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_sqlConnectionString);
+        await conn.OpenAsync(cancellationToken);
+        await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@AccidentNo", accidentNo);
+
+        var cases = new List<AranPatientCaseDto>();
+        var casesById = new Dictionary<string, AranPatientCaseDto>(StringComparer.Ordinal);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var caseId = reader.GetString(0).Trim();
+            if (!casesById.TryGetValue(caseId, out var patientCase))
+            {
+                var medicalStatus = reader.IsDBNull(7) ? null : reader.GetString(7).Trim();
+                patientCase = new AranPatientCaseDto
+                {
+                    CaseId = caseId,
+                    PatientId = reader.IsDBNull(1) ? null : reader.GetString(1).Trim(),
+                    NationalId = reader.IsDBNull(2) ? null : reader.GetString(2).Trim(),
+                    FirstName = reader.IsDBNull(3) ? null : reader.GetString(3).Trim(),
+                    LastName = reader.IsDBNull(4) ? null : reader.GetString(4).Trim(),
+                    DateOfBirth = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                    MainInjury = reader.IsDBNull(6) ? null : reader.GetString(6).Trim(),
+                    TriageCode = NormalizeTriage(medicalStatus),
+                    TriageLabel = TriageLabel(NormalizeTriage(medicalStatus)),
+                    AccidentNo = accidentNo
+                };
+                casesById.Add(caseId, patientCase);
+                cases.Add(patientCase);
+            }
+
+            if (reader.IsDBNull(8))
+                continue;
+
+            var sequenceText = reader.GetString(8).Trim();
+            int.TryParse(sequenceText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var sequence);
+            var movementCategory = reader.IsDBNull(9) ? null : reader.GetString(9).Trim();
+            var movementTypeCode = reader.IsDBNull(10) ? null : reader.GetString(10).Trim();
+            var movementDate = reader.IsDBNull(11) ? (DateTime?)null : reader.GetDateTime(11);
+            var movementTime = reader.IsDBNull(12) ? (TimeSpan?)null : reader.GetTimeSpan(12);
+            var department = reader.IsDBNull(13) ? null : reader.GetString(13).Trim();
+            var careUnit = reader.IsDBNull(14) ? null : reader.GetString(14).Trim();
+            var movement = new MovementHistoryItemDto
+            {
+                SequenceNumber = sequence,
+                MovementCode = $"{movementCategory}|{movementTypeCode}",
+                MovementType = SapSync.Core.Constants.SapMovementMap.TryGetMovementDescription(
+                    movementCategory, movementTypeCode) ?? MovementLabel(movementCategory),
+                Timestamp = CombineDateTime(movementDate, movementTime),
+                MedicalDept = department,
+                NursingUnit = careUnit
+            };
+            patientCase.Movements.Add(movement);
+            patientCase.CurrentMovementCategory = movementCategory;
+            patientCase.CurrentStatus = movement.MovementType;
+            patientCase.Department = department;
+            patientCase.Location = string.Join(" / ", new[] { department, careUnit }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+            patientCase.LastMovementTime = movement.Timestamp;
+        }
+
+        return cases;
+    }
+
+    private static string? TriageLabel(string? triageCode) => triageCode switch
+    {
+        "RED" => "קשה / מיידי (T1)",
+        "YELLOW" => "בינוני (T2)",
+        "GREEN" => "קל (T3)",
+        "BLACK" => "נפטר",
+        _ => null
+    };
+
+    private static string? MovementLabel(string? category) => category switch
+    {
+        "1" => "קבלה",
+        "2" => "שחרור",
+        "3" => "העברה",
+        _ => category
+    };
 
     private async Task<KpiSummaryDto?> QueryKpisAsync(string accidentNo, CancellationToken cancellationToken)
     {
@@ -442,6 +592,42 @@ public sealed class AranController : ControllerBase
     }
 
     #region DTOs
+
+    public sealed class AranDashboardPayloadDto
+    {
+        public required IEnumerable<IncidentOptionDto> Incidents { get; set; }
+        public IncidentOptionDto? SelectedIncident { get; set; }
+        public required IEnumerable<AranPatientCaseDto> Cases { get; set; }
+    }
+
+    public sealed class IncidentOptionDto
+    {
+        public required string AccidentNo { get; set; }
+        public string? AccidentPlace { get; set; }
+        public DateTime? AccidentDate { get; set; }
+        public TimeSpan? AccidentTime { get; set; }
+    }
+
+    public sealed class AranPatientCaseDto
+    {
+        public required string CaseId { get; set; }
+        public string? PatientId { get; set; }
+        public string? NationalId { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? FullName => string.Join(" ", new[] { FirstName, LastName }.Where(name => !string.IsNullOrWhiteSpace(name)));
+        public DateTime? DateOfBirth { get; set; }
+        public required string AccidentNo { get; set; }
+        public string? MainInjury { get; set; }
+        public string? TriageCode { get; set; }
+        public string? TriageLabel { get; set; }
+        public string? CurrentMovementCategory { get; set; }
+        public string? CurrentStatus { get; set; }
+        public string? Location { get; set; }
+        public string? Department { get; set; }
+        public DateTime? LastMovementTime { get; set; }
+        public List<MovementHistoryItemDto> Movements { get; } = new();
+    }
 
     public sealed class AranPollRequestDto
     {

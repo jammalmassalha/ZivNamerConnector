@@ -299,6 +299,98 @@ mat-icon {
 .mb-3 { margin-bottom: 24px; }
 .mb-4 { margin-bottom: 32px; }
 
+.aran-app {
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.aran-main { max-width: 1600px; margin: auto; padding: 24px; }
+.aran-incident-banner, .aran-table-toolbar, .aran-footer {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+}
+.aran-incident-banner { margin-bottom: 20px; }
+.aran-incident-banner h1 { margin: 4px 0 0; font-size: 24px; }
+.aran-eyebrow { color: #64748b; font-size: 12px; }
+.aran-incident-meta { display: grid; gap: 4px; color: #475569; }
+.aran-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.aran-kpi, .aran-patients-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+}
+.aran-kpi { display: grid; gap: 8px; padding: 16px; border-top: 3px solid #1e4e9d; }
+.aran-kpi strong { font-size: 28px; color: #1e4e9d; }
+.aran-kpi-red { border-top-color: #dc2626; }
+.aran-kpi-red strong { color: #dc2626; }
+.aran-kpi-yellow { border-top-color: #eab308; }
+.aran-kpi-yellow strong { color: #a16207; }
+.aran-kpi-green { border-top-color: #16a34a; }
+.aran-kpi-green strong { color: #15803d; }
+.aran-kpi-admitted { border-top-color: #f15a24; }
+.aran-kpi-admitted strong { color: #f15a24; }
+.aran-kpi-discharged { border-top-color: #64748b; }
+.aran-kpi-discharged strong { color: #475569; }
+.aran-error { margin-bottom: 16px; padding: 12px 16px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+.aran-patients-card { overflow: hidden; }
+.aran-table-toolbar { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
+.aran-table-toolbar h2 { display: inline-block; margin: 0 12px 0 0; font-size: 18px; }
+.aran-result-count, .aran-table td small { color: #64748b; font-size: 12px; }
+.aran-search { display: flex; align-items: center; gap: 8px; width: min(390px, 45%); padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 4px; }
+.aran-search input { width: 100%; padding: 10px 0; border: 0; outline: 0; background: transparent; text-align: right; }
+.aran-search input::placeholder { color: #64748b; opacity: 1; }
+.aran-filters { display: flex; gap: 8px; padding: 12px 20px; border-bottom: 1px solid #e2e8f0; }
+.aran-filters button, .aran-details-button { padding: 7px 12px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #334155; cursor: pointer; }
+.aran-filters button.active { border-color: #1e4e9d; background: #1e4e9d; color: #fff; }
+.aran-table-scroll { overflow-x: auto; }
+.aran-table { width: 100%; border-collapse: collapse; text-align: right; }
+.aran-table th { padding: 12px 16px; background: #f8fafc; color: #475569; font-size: 12px; white-space: nowrap; }
+.aran-table td { padding: 12px 16px; border-top: 1px solid #e2e8f0; vertical-align: middle; }
+.aran-table tbody tr[tabindex] { cursor: pointer; }
+.aran-table tbody tr[tabindex]:hover { background: #f8fafc; }
+.aran-case-number { color: #1e4e9d; font-weight: 700; }
+.aran-table td strong, .aran-table td small { display: block; }
+.aran-triage { display: inline-block; padding: 4px 9px; border-radius: 12px; background: #f1f5f9; color: #475569; white-space: nowrap; }
+.aran-triage[data-triage="RED"] { background: #fee2e2; color: #b91c1c; }
+.aran-triage[data-triage="YELLOW"] { background: #fef3c7; color: #92400e; }
+.aran-triage[data-triage="GREEN"] { background: #dcfce7; color: #166534; }
+.aran-triage[data-triage="BLACK"] { background: #1f2937; color: #fff; }
+.aran-empty { padding: 32px !important; color: #64748b; text-align: center; }
+.aran-row-updated { animation: aran-row-flash 5s ease-out; }
+@keyframes aran-row-flash { 0%, 20% { background: #fef9c3; box-shadow: inset -4px 0 #eab308; } 100% { background: transparent; box-shadow: none; } }
+.aran-footer { justify-content: flex-start; margin-top: 12px; color: #64748b; font-size: 12px; }
+.aran-footer > span { display: inline-flex; align-items: center; gap: 7px; }
+.aran-connection-dot { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; }
+.aran-offline .aran-connection-dot { background: #dc2626; }
+.aran-pulse { animation: aran-connection-pulse 1.2s ease-out; }
+@keyframes aran-connection-pulse { 50% { color: #f15a24; transform: scale(1.03); } }
+.aran-drawer-backdrop { position: fixed; inset: 0; z-index: 20; display: flex; justify-content: flex-start; background: rgb(15 23 42 / 45%); }
+.aran-drawer { width: min(620px, 100%); height: 100%; padding: 24px; overflow-y: auto; background: #fff; box-shadow: 0 0 24px rgb(15 23 42 / 20%); }
+.aran-drawer-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
+.aran-drawer-header h2 { margin: 4px 0 0; }
+.aran-close-button { border: 0; background: transparent; color: #64748b; font-size: 28px; cursor: pointer; }
+.aran-drawer-section { padding: 18px 0; border-bottom: 1px solid #e2e8f0; }
+.aran-drawer-section h3 { margin: 0 0 12px; color: #1e4e9d; font-size: 15px; }
+.aran-demographics dl { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; }
+.aran-demographics dt { color: #64748b; }
+.aran-demographics dd { margin: 0; font-weight: 600; }
+.aran-movement-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.aran-movement-list li { display: flex; gap: 12px; align-items: flex-start; }
+.aran-movement-list li div { display: grid; gap: 3px; }
+.aran-movement-list li span, .aran-movement-list li small { color: #64748b; font-size: 12px; }
+.aran-movement-sequence { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #eff6ff; color: #1e4e9d; font-weight: 700; }
+.aran-json { padding: 12px; overflow: auto; direction: ltr; text-align: left; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 11px; }
+
+@media (max-width: 900px) {
+  .aran-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .aran-main { padding: 16px; }
+}
+@media (max-width: 560px) {
+  .aran-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aran-incident-banner, .aran-table-toolbar { align-items: stretch; flex-direction: column; }
+  .aran-search { width: auto; }
+  .aran-filters { overflow-x: auto; }
+  .aran-demographics dl { grid-template-columns: 100px 1fr; }
+}
+
 .mt-0 { margin-top: 0; }
 .mt-1 { margin-top: 8px; }
 .mt-2 { margin-top: 16px; }
@@ -485,4 +577,3 @@ mat-icon {
     border-color: #475569;
   }
 }
-
