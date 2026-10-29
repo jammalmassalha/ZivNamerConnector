@@ -31,7 +31,7 @@ public sealed class AranController : ControllerBase
         _aranSyncService = aranSyncService ?? throw new ArgumentNullException(nameof(aranSyncService));
         _tableSyncService = tableSyncService ?? throw new ArgumentNullException(nameof(tableSyncService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _sqlConnectionString = configuration.GetConnectionString("SqlServer") 
+        _sqlConnectionString = configuration.GetConnectionString("SqlServer")
             ?? throw new InvalidOperationException("SqlServer connection string is not configured.");
     }
 
@@ -264,7 +264,7 @@ public sealed class AranController : ControllerBase
             LatestMovement AS (
                 SELECT n.FALNR, n.PATNR, n.BEWTY, n.BWART, n.FALAR, n.CLASS, n.BWIDT, n.BWITM, n.ZIMMR, n.BETT,
                        ROW_NUMBER() OVER (PARTITION BY n.FALNR ORDER BY n.BWIDT DESC, n.BWITM DESC, n.LFDBEW DESC) AS rn
-                FROM [sap].[N_FALL_BEW] n
+                FROM [dbo].[N_FALL_BEW] n
                 WHERE ISNULL(n.STORN, '') = '' AND ISNULL(n.FSTORN, '') = ''
             )
             SELECT c.PATCASEID, lm.PATNR, lm.BEWTY, lm.BWART, lm.FALAR, lm.CLASS, lm.BWIDT, lm.BWITM,
@@ -398,7 +398,7 @@ public sealed class AranController : ControllerBase
             SELECT 
                 n.FALNR, n.LFDBEW, n.BEWTY, n.BWART, n.BWIDT, n.BWITM,
                 n.ZIMMR, n.BETT, n.ORGFA, n.ORGPF
-            FROM [sap].[N_FALL_BEW] n
+            FROM [dbo].[N_FALL_BEW] n
             WHERE n.FALNR = @CaseNumber AND n.STORN = ' ' AND n.FSTORN = ' '
             ORDER BY n.LFDBEW DESC";
 
