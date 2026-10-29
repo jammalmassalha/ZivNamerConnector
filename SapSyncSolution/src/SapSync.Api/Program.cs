@@ -61,6 +61,7 @@ builder.Services.AddScoped<ISqlBulkWriter, SqlBulkWriter>();
 builder.Services.AddScoped<ISapSyncOrchestrator, SapSyncOrchestrator>();
 builder.Services.AddScoped<ITableSyncService, TableSyncService>();
 builder.Services.AddScoped<IDateBasedSyncService, DateBasedSyncService>();
+builder.Services.AddScoped<DeltaSyncFilterBuilder>();
 
 // ARAN (Multi-Casualty Incident) synchronization service -> Scoped.
 builder.Services.AddScoped(sp =>
