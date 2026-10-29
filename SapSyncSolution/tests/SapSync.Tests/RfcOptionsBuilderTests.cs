@@ -70,4 +70,92 @@ public class RfcOptionsBuilderTests
 
         Assert.Equal(new[] { new string('A', 72), new string('A', 72), "AAAAAA = 1" }, lines);
     }
+
+    // ============ Dual-Date Delta Sync RFC Tests ============
+
+    [Fact]
+    public void Split_DualDateFilter_ForNPAT_FitsIntoRfcLines()
+    {
+        // Typical NPAT dual-date filter
+        var filter = "( ERDAT >= '20261027' OR UPDAT >= '20261027' )";
+
+        var lines = RfcOptionsBuilder.Split(filter);
+
+        Assert.Single(lines);
+        Assert.Equal(filter, lines[0]);
+        Assert.InRange(lines[0].Length, 1, 72);
+    }
+
+    [Fact]
+    public void Split_DualDateFilter_WithCancellationFlag_FitsIntoRfcLines()
+    {
+        // NBEW dual-date filter with cancellation check
+        var filter = "( BWIDT >= '20261027' OR BWEDT >= '20261027' ) AND STORN = ' '";
+
+        var lines = RfcOptionsBuilder.Split(filter);
+
+        Assert.Single(lines);
+        Assert.Equal(filter, lines[0]);
+        Assert.InRange(lines[0].Length, 1, 72);
+    }
+
+    [Fact]
+    public void Split_ComplexDualDateFilter_WithMultipleCancellationFlags_FitsIntoRfcLines()
+    {
+        // N_FALL_BEW dual-date filter with multiple cancellation flags
+        var filter = "STORN = ' ' AND FSTORN = ' ' AND ( BWIDT >= '20261027' OR BWEDT >= '20261027' )";
+
+        var lines = RfcOptionsBuilder.Split(filter);
+
+        // Complex filter may span multiple lines
+        Assert.True(lines.Count >= 1);
+        Assert.All(lines, l => Assert.InRange(l.Length, 1, 72));
+        
+        // Verify it can be reconstructed
+        var reconstructed = string.Join(" ", lines);
+        Assert.Contains("STORN = ' '", reconstructed);
+        Assert.Contains("FSTORN = ' '", reconstructed);
+        Assert.Contains("BWIDT >=", reconstructed);
+        Assert.Contains("BWEDT >=", reconstructed);
+    }
+
+    [Fact]
+    public void Split_AllDateFieldsPreserved_InDualDateFilter()
+    {
+        var filter = "( ERDAT >= '20261027' OR UPDAT >= '20261027' )";
+
+        var lines = RfcOptionsBuilder.Split(filter);
+
+        var joined = string.Join(" ", lines);
+        Assert.Contains("ERDAT", joined);
+        Assert.Contains("UPDAT", joined);
+        Assert.Contains("20261027", joined);
+    }
+
+    [Fact]
+    public void Split_ZeroDateFormat_PreservedInFilter()
+    {
+        // Empty/unchanged dates in SAP may be '00000000'
+        var filter = "( ERDAT >= '00000000' OR UPDAT >= '00000000' )";
+
+        var lines = RfcOptionsBuilder.Split(filter);
+
+        Assert.Single(lines);
+        Assert.Contains("'00000000'", lines[0]);
+    }
+
+    [Fact]
+    public void Split_ParenthesesAndBooleanOperators_PreservedInDeltaFilter()
+    {
+        var filter = "( ERDAT >= '20261027' OR UPDAT >= '20261027' ) AND STORN = ' '";
+
+        var lines = RfcOptionsBuilder.Split(filter);
+
+        var joined = string.Join(" ", lines);
+        Assert.Contains("(", joined);
+        Assert.Contains(")", joined);
+        Assert.Contains(" OR ", joined);
+        Assert.Contains(" AND ", joined);
+    }
 }
+

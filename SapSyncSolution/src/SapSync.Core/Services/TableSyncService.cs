@@ -9,16 +9,24 @@ namespace SapSync.Core.Services;
 /// <summary>
 /// Syncs configured tables page by page (RFC_READ_TABLE ROWSKIPS / ROWCOUNT) so large tables are never held in memory
 /// at once. Each page is upserted in its own transaction.
+/// Supports incremental (delta) syncs using dual-date filtering (InsertDate >= date OR UpdateDate >= date).
 /// </summary>
 public sealed class TableSyncService : ITableSyncService
 {
     private readonly ISapSyncOrchestrator _orchestrator;
+    private readonly DeltaSyncFilterBuilder _filterBuilder;
     private readonly ILogger<TableSyncService> _logger;
     private readonly Dictionary<string, SyncTableDefinition> _tables;
 
     public TableSyncService(ISapSyncOrchestrator orchestrator, IOptions<SyncTablesSettings> settings, ILogger<TableSyncService> logger)
+        : this(orchestrator, new DeltaSyncFilterBuilder(logger), settings, logger)
+    {
+    }
+
+    internal TableSyncService(ISapSyncOrchestrator orchestrator, DeltaSyncFilterBuilder filterBuilder, IOptions<SyncTablesSettings> settings, ILogger<TableSyncService> logger)
     {
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
+        _filterBuilder = filterBuilder ?? throw new ArgumentNullException(nameof(filterBuilder));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _tables = new Dictionary<string, SyncTableDefinition>(
             settings?.Value?.Tables ?? new Dictionary<string, SyncTableDefinition>(), StringComparer.OrdinalIgnoreCase);
@@ -38,7 +46,13 @@ public sealed class TableSyncService : ITableSyncService
         var tableName = _tables.Keys.First(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase));
         var pageSize = overrides?.PageSize > 0 ? overrides.PageSize : definition.PageSize;
         var maxRows = overrides?.MaxRows ?? 0;
-        var filter = string.IsNullOrWhiteSpace(overrides?.FilterCondition) ? definition.FilterCondition : overrides!.FilterCondition;
+        
+        // Resolve filter: LookbackDays takes precedence for dual-date delta syncs
+        var filter = ResolveFilter(definition, overrides);
+
+        _logger.LogInformation(
+            "Starting sync for table {TableName} with filter: {Filter}",
+            tableName, string.IsNullOrWhiteSpace(filter) ? "(none)" : filter);
 
         var watch = Stopwatch.StartNew();
         var pages = new List<SyncResult>();
@@ -56,7 +70,7 @@ public sealed class TableSyncService : ITableSyncService
                 PrimaryKeyColumns = definition.PrimaryKeyColumns.ToList(),
                 Fields = definition.Fields.Keys.ToList(),
                 ColumnMappings = new Dictionary<string, string>(definition.Fields, StringComparer.OrdinalIgnoreCase),
-               // FilterCondition = filter,
+                FilterCondition = filter,
                 RowSkip = rowsRead,
                 RowCount = count,
             };
@@ -107,5 +121,28 @@ public sealed class TableSyncService : ITableSyncService
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Resolves the effective filter condition based on overrides and table configuration.
+    /// LookbackDays in the override triggers dual-date delta filtering.
+    /// </summary>
+    private string? ResolveFilter(SyncTableDefinition definition, TableSyncRequest? overrides)
+    {
+        // If LookbackDays is explicitly set, build dual-date filter
+        if (overrides?.LookbackDays.HasValue == true)
+        {
+            var lookbackDays = overrides.LookbackDays.Value;
+            var existingFilter = definition.FilterCondition;
+            return _filterBuilder.BuildDualDateFilter(definition, lookbackDays, existingFilter);
+        }
+
+        // Otherwise, use explicit FilterCondition or table's default
+        if (!string.IsNullOrWhiteSpace(overrides?.FilterCondition))
+        {
+            return overrides.FilterCondition;
+        }
+
+        return definition.FilterCondition;
     }
 }
