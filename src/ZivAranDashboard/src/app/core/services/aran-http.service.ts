@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Casualty, KpiSummary, PatientHistory } from '../models/aran.models';
+import { environment } from '../../../environments/environment';
 
 interface SyncAranRequest {
   accidentNo?: string;
@@ -24,7 +25,7 @@ interface UpdateTriageRequest {
   providedIn: 'root',
 })
 export class AranHttpService {
-  private readonly apiUrl = '/api/aran';
+  private readonly apiUrl = `${environment.apiUrl}/aran`;
 
   constructor(private http: HttpClient) {}
 
