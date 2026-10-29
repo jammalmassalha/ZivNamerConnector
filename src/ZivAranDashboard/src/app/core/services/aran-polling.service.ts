@@ -23,7 +23,7 @@ const ALERT_TTL_MS = 8_000;
 const HIGHLIGHT_TTL_MS = 5_000;
 const MAX_ALERTS = 3;
 
-/** Polls POST /api/aran/poll every minute and diffs results to raise alerts. */
+/** Polls POST /api/Aran/poll every minute and diffs results to raise alerts. */
 @Injectable({ providedIn: 'root' })
 export class AranPollingService implements OnDestroy {
   private readonly http = inject(HttpClient);
@@ -87,7 +87,7 @@ export class AranPollingService implements OnDestroy {
   private fetch() {
     this.isSyncing.set(true);
     const requested = this.accidentNo;
-    const url = `${environment.apiUrl}/aran/poll`;
+    const url = `${environment.apiUrl}/Aran/poll`;
     console.log('[AranPolling] POST', url, { accidentNo: requested, search: this.search });
     return this.http
       .post<PollResult>(url, {

@@ -28,7 +28,7 @@ export class AranHttpService {
   private readonly apiUrl: string;
 
   constructor(private http: HttpClient) {
-    this.apiUrl = `${environment.apiUrl}/aran`;
+    this.apiUrl = `${environment.apiUrl}/Aran`;
     console.log('AranHttpService initialized with apiUrl:', this.apiUrl);
   }
 
