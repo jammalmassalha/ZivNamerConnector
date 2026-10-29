@@ -1,10 +1,4 @@
 export const environment = {
   production: false,
-  apiUrl: getBaseUrl() + '/api'
+  apiUrl: 'http://pbi_srv:546/api'
 };
-
-function getBaseUrl(): string {
-  const base = document.querySelector('base')?.getAttribute('href') || '/';
-  return base.replace(/\/$/, ''); // Remove trailing slash
-}
-

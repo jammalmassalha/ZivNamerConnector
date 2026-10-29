@@ -87,15 +87,17 @@ export class AranPollingService implements OnDestroy {
   private fetch() {
     this.isSyncing.set(true);
     const requested = this.accidentNo;
+    const url = `${environment.apiUrl}/aran/poll`;
+    console.log('[AranPolling] POST', url, { accidentNo: requested, search: this.search });
     return this.http
-      .post<PollResult>(`${environment.apiUrl}/aran/poll`, {
+      .post<PollResult>(url, {
         accidentNo: requested,
         search: this.search || null,
       })
       .pipe(
         tap((res) => console.log('[AranPolling] response for', requested, res)),
         catchError((err) => {
-          console.error('Polling failed:', err);
+          console.error('[AranPolling] request failed', err);
           return of(null);
         }),
         // Drop stale responses from a previously selected incident
