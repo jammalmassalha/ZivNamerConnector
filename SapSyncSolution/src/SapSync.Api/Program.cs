@@ -8,7 +8,11 @@ using SapSync.Core.Models;
 using SapSync.Core.Services;
 using SapSync.Infrastructure.Persistence;
 using SapSync.Infrastructure.Sap;
+using System.Text;
 
+// Register code pages provider to support legacy and regional encodings (like 28598)
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+// or your app startup initialization
 const string AngularCorsPolicy = "AngularClient";
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -61,7 +65,6 @@ builder.Services.AddScoped<ISqlBulkWriter, SqlBulkWriter>();
 builder.Services.AddScoped<ISapSyncOrchestrator, SapSyncOrchestrator>();
 builder.Services.AddScoped<ITableSyncService, TableSyncService>();
 builder.Services.AddScoped<IDateBasedSyncService, DateBasedSyncService>();
-builder.Services.AddScoped<DeltaSyncFilterBuilder>();
 
 // ARAN (Multi-Casualty Incident) synchronization service -> Scoped.
 builder.Services.AddScoped(sp =>
@@ -69,16 +72,16 @@ builder.Services.AddScoped(sp =>
     var sqlSettings = sp.GetRequiredService<IOptions<SqlSettings>>().Value;
     var hubContext = sp.GetRequiredService<IHubContext<AranHub>>();
     return new AranSyncService(sqlSettings.ConnectionString!, hubContext);
-});
+    });
 
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
-if (allowedOrigins is not { Length: > 0 })
-{
-    allowedOrigins = new[] { "http://localhost:4200", "http://pbi_srv" };
-}
+    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+    if (allowedOrigins is not { Length: > 0 })
+    {
+        allowedOrigins = new[] { "http://localhost:4200", "http://pbi_srv" };
+    }
 
-builder.Services.AddCors(options =>
-{
+    builder.Services.AddCors(options =>
+    {
     options.AddPolicy(AngularCorsPolicy, policy => policy
         .WithOrigins(allowedOrigins)
         .AllowCredentials()
@@ -106,20 +109,18 @@ app.Logger.LogInformation(
 
 if (BuildEnvironment.RuntimeOverrideIgnored)
 {
-    app.Logger.LogWarning(
-        "ASPNETCORE_ENVIRONMENT/DOTNET_ENVIRONMENT={RuntimeEnvironment} is ignored: this is a {BuildEnvironment} build",
-        BuildEnvironment.RuntimeEnvironment, BuildEnvironment.BakedEnvironment);
+app.Logger.LogWarning(
+    "ASPNETCORE_ENVIRONMENT/DOTNET_ENVIRONMENT={RuntimeEnvironment} is ignored: this is a {BuildEnvironment} build",
+    BuildEnvironment.RuntimeEnvironment, BuildEnvironment.BakedEnvironment);
 }
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+app.UseSwagger();
+app.UseSwaggerUI();
 }
 
-// API runs over plain HTTP on port 546.
-// app.UseHttpsRedirection();
-app.UseRouting();
+app.UseHttpsRedirection();
 app.UseCors(AngularCorsPolicy);
 app.UseAuthorization();
 app.MapControllers();
