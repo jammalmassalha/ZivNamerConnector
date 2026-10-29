@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SapSync.Api.Services;
+using SapSync.Core.Interfaces;
+using SapSync.Core.Models;
 
 namespace SapSync.Api.Controllers;
 
@@ -12,12 +14,23 @@ namespace SapSync.Api.Controllers;
 [Produces("application/json")]
 public sealed class AranController : ControllerBase
 {
+    // SAP tables pulled by /api/aran/sync, in dependency order (event, incident cases, movements, detailed movements).
+    private static readonly string[] AranSapTables = { "ZNACCIDENT", "ZNMCICASE", "NBEW", "N_FALL_BEW" };
+
     private readonly AranSyncService _aranSyncService;
+    private readonly ITableSyncService _tableSyncService;
+    private readonly ILogger<AranController> _logger;
     private readonly string _sqlConnectionString;
 
-    public AranController(AranSyncService aranSyncService, IConfiguration configuration)
+    public AranController(
+        AranSyncService aranSyncService,
+        ITableSyncService tableSyncService,
+        ILogger<AranController> logger,
+        IConfiguration configuration)
     {
         _aranSyncService = aranSyncService ?? throw new ArgumentNullException(nameof(aranSyncService));
+        _tableSyncService = tableSyncService ?? throw new ArgumentNullException(nameof(tableSyncService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sqlConnectionString = configuration.GetConnectionString("SqlServer") 
             ?? throw new InvalidOperationException("SqlServer connection string is not configured.");
     }
@@ -88,7 +101,7 @@ public sealed class AranController : ControllerBase
     }
 
     /// <summary>
-    /// Manually trigger a sync of ARAN case data from SAP N_FALL_BEW to PATIENT_MONITORING.
+    /// Pulls ZNACCIDENT, ZNMCICASE, NBEW and N_FALL_BEW from SAP into SQL Server, then refreshes PATIENT_MONITORING.
     /// Broadcasts updates to all connected clients via SignalR for the affected incident.
     /// </summary>
     /// <param name="request">Optional: filter parameters (accidentNo, fromDate)</param>
@@ -104,23 +117,59 @@ public sealed class AranController : ControllerBase
     {
         try
         {
-            var (success, updatedCount, errorMessage) = await _aranSyncService.SyncAranCasesAsync(
+            // 1) Pull the ARAN tables (including N_FALL_BEW) from SAP into SQL Server.
+            var lookbackDays = request?.LookbackDays
+                ?? (request?.FromDate is { } fromDate ? Math.Max(0, (DateTime.Today - fromDate.Date).Days) : 1);
+
+            var tableResults = new List<AranTableSyncDto>();
+            foreach (var table in AranSapTables)
+            {
+                if (!_tableSyncService.IsConfigured(table))
+                {
+                    tableResults.Add(new AranTableSyncDto { Name = table, Success = false, ErrorMessage = "Table is not configured in SyncTables." });
+                    continue;
+                }
+
+                var r = await _tableSyncService.SyncTableAsync(
+                    table, new TableSyncRequest { LookbackDays = lookbackDays }, cancellationToken);
+                if (!r.Success)
+                    _logger.LogError("ARAN SAP sync failed for {Table}: {Error}", table, r.ErrorMessage);
+
+                tableResults.Add(new AranTableSyncDto
+                {
+                    Name = table,
+                    Success = r.Success,
+                    RowsRead = r.RowsRead,
+                    RowsProcessed = r.RowsProcessed,
+                    ErrorMessage = r.ErrorMessage
+                });
+            }
+
+            // 2) Refresh the dbo.PATIENT_MONITORING cache from the freshly synced data (best effort).
+            var (localOk, updatedCount, localError) = await _aranSyncService.SyncAranCasesAsync(
                 request?.AccidentNo,
                 request?.FromDate,
                 cancellationToken);
+            if (!localOk)
+                _logger.LogWarning("PATIENT_MONITORING refresh failed: {Error}", localError);
 
+            var failed = tableResults.Where(t => !t.Success).ToList();
             var result = new SyncAranResultDto
             {
-                Success = success,
+                Success = failed.Count == 0,
                 UpdatedCasesCount = updatedCount,
-                ErrorMessage = errorMessage,
-                SyncedAt = DateTime.UtcNow
+                ErrorMessage = failed.Count == 0
+                    ? null
+                    : string.Join("; ", failed.Select(t => $"{t.Name}: {t.ErrorMessage}")),
+                SyncedAt = DateTime.UtcNow,
+                Tables = tableResults
             };
 
-            return success ? Ok(result) : StatusCode(StatusCodes.Status500InternalServerError, result);
+            return result.Success ? Ok(result) : StatusCode(StatusCodes.Status502BadGateway, result);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "ARAN sync failed");
             return StatusCode(StatusCodes.Status500InternalServerError, new SyncAranResultDto
             {
                 Success = false,
@@ -436,6 +485,18 @@ public sealed class AranController : ControllerBase
     {
         public string? AccidentNo { get; set; }
         public DateTime? FromDate { get; set; }
+
+        /// <summary>Days back to pull from SAP (default 1). Overrides FromDate.</summary>
+        public int? LookbackDays { get; set; }
+    }
+
+    public sealed class AranTableSyncDto
+    {
+        public required string Name { get; set; }
+        public bool Success { get; set; }
+        public int RowsRead { get; set; }
+        public int RowsProcessed { get; set; }
+        public string? ErrorMessage { get; set; }
     }
 
     public sealed class SyncAranResultDto
@@ -444,6 +505,7 @@ public sealed class AranController : ControllerBase
         public required int UpdatedCasesCount { get; set; }
         public string? ErrorMessage { get; set; }
         public required DateTime SyncedAt { get; set; }
+        public IReadOnlyList<AranTableSyncDto> Tables { get; set; } = Array.Empty<AranTableSyncDto>();
     }
 
     public sealed class UpdateTriageRequestDto
