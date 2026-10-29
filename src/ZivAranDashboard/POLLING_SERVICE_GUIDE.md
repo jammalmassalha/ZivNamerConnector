@@ -2,6 +2,21 @@
 
 ## Overview
 
+### Dashboard startup
+
+The dashboard waits for an incident number before sending any polling requests.
+Enter the number in the header, then press Enter or leave the field to start
+`AranPollingService.start(accidentNo)`. It sends `POST /api/aran/poll` immediately
+and repeats every 60 seconds. Clearing the field stops polling.
+
+The header preserves unsubmitted text when the system clock updates. Only a
+change to `selectedAccidentNo` resets the input to the selected incident.
+
+The HTTP logging interceptor is registered in `src/main.ts`. Its request/response
+logs appear only when an HTTP observable is subscribed to; the
+`AranHttpService initialized` message only confirms service construction, not a
+request. Before an incident is submitted, no HTTP logs are expected.
+
 Replaced WebSocket/SignalR with an efficient **polling-based system** that fetches data via POST requests every 60 seconds and intelligently detects changes with beautiful, non-intrusive notifications.
 
 ### Why Polling Over WebSocket?

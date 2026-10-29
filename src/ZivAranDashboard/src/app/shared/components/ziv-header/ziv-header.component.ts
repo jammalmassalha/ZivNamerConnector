@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSelectModule } from '@angular/material/select';
@@ -42,6 +42,7 @@ import { FormsModule } from '@angular/forms';
                 placeholder="הקלד מספר אירוע..."
                 [(ngModel)]="accidentNo"
                 (change)="onAccidentNoChange()"
+                (keydown.enter)="onAccidentNoChange()"
               />
             </mat-form-field>
           </div>
@@ -152,7 +153,7 @@ import { FormsModule } from '@angular/forms';
     `,
   ],
 })
-export class ZivHeaderComponent {
+export class ZivHeaderComponent implements OnChanges {
   @Input() selectedAccidentNo: string = '';
   @Input() isConnected: boolean = false;
   @Input() systemTime: Date = new Date();
@@ -160,8 +161,10 @@ export class ZivHeaderComponent {
 
   accidentNo: string = '';
 
-  ngOnChanges(): void {
-    this.accidentNo = this.selectedAccidentNo;
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['selectedAccidentNo']) {
+      this.accidentNo = this.selectedAccidentNo;
+    }
   }
 
   onAccidentNoChange(): void {
