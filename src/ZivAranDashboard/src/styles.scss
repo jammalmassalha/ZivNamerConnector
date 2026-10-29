@@ -147,27 +147,72 @@ mat-icon {
   color: #ffffff !important;
 }
 
-/* Form fields RTL */
+/* Form fields RTL & Placeholder Visibility Fix */
 .mat-form-field {
   direction: rtl;
+  text-align: right;
   
   &.mat-form-field-appearance-outline {
     .mat-form-field-infix {
       padding: 1em 0 !important;
     }
   }
+
+  &.mat-form-field-appearance-fill {
+    .mat-form-field-infix {
+      padding: 1em 0 !important;
+    }
+  }
+
+  /* Fix MDC form field placeholder visibility */
+  input.mat-mdc-input-element::placeholder,
+  input.mat-input-element::placeholder {
+    color: #64748b !important;
+    opacity: 1 !important;
+    font-size: 13px !important;
+    font-weight: 400;
+  }
+
+  /* Fix select placeholder visibility */
+  .mat-mdc-select-placeholder {
+    color: #64748b !important;
+    opacity: 1 !important;
+    font-size: 13px !important;
+  }
+
+  /* Fix floating label alignment in RTL */
+  .mat-mdc-floating-label {
+    right: 0 !important;
+    left: auto !important;
+    transform-origin: top right !important;
+  }
+
+  .mat-form-field-flex {
+    align-items: center;
+  }
+
+  /* Ensure label doesn't hide placeholder */
+  &.mat-focused,
+  &.mat-form-field-should-float {
+    .mat-mdc-floating-label {
+      transform: translateY(-1.59375em) scale(0.75) !important;
+    }
+  }
 }
 
 .mat-select {
   direction: rtl;
+  text-align: right;
 }
 
 .mat-select-trigger {
   direction: rtl;
+  text-align: right;
 }
 
 .mat-input-element::placeholder {
-  color: #9ca3af;
+  color: #64748b !important;
+  opacity: 1 !important;
 }
 
 /* Tables */

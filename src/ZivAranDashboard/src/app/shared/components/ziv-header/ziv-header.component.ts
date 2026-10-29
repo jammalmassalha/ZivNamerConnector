@@ -35,11 +35,11 @@ import { FormsModule } from '@angular/forms';
 
         <div class="controls-section">
           <div class="incident-selector">
-            <mat-form-field appearance="fill">
-              <mat-label>בחר אירוע</mat-label>
+            <mat-form-field appearance="fill" [floatLabel]="'always'" dir="rtl">
+              <mat-label>סינון לפי אירוע אר״ן</mat-label>
               <input
                 matInput
-                placeholder="הזן מס׳ אירוע"
+                placeholder="הקלד מספר אירוע..."
                 [(ngModel)]="accidentNo"
                 (change)="onAccidentNoChange()"
               />
