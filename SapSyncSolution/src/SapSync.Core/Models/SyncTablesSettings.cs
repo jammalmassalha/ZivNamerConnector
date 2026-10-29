@@ -31,6 +31,12 @@ public sealed class SyncTableDefinition
     /// <summary>Default ABAP WHERE clause (may be overridden per request).</summary>
     public string? FilterCondition { get; set; }
 
+    /// <summary>SAP field name for creation/insertion date (e.g., "ERDAT", "BWIDT"). Used for incremental syncs.</summary>
+    public string? InsertDateField { get; set; }
+
+    /// <summary>SAP field name for update/modification date (e.g., "UPDAT", "BWEDT"). Used for incremental syncs.</summary>
+    public string? UpdateDateField { get; set; }
+
     /// <summary>Rows read from SAP and upserted per round-trip.</summary>
     [Range(1, 1_000_000)]
     public int PageSize { get; set; } = 50_000;
