@@ -74,7 +74,7 @@ builder.Services.AddScoped(sp =>
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
 if (allowedOrigins is not { Length: > 0 })
 {
-    allowedOrigins = new[] { "http://localhost:4200" };
+    allowedOrigins = new[] { "http://localhost:4200", "http://pbi_srv" };
 }
 
 builder.Services.AddCors(options =>
@@ -117,7 +117,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// API runs over plain HTTP on port 546.
+// app.UseHttpsRedirection();
+app.UseRouting();
 app.UseCors(AngularCorsPolicy);
 app.UseAuthorization();
 app.MapControllers();

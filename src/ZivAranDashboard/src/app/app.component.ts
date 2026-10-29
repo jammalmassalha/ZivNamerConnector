@@ -1,4 +1,4 @@
-import { Component, signal, effect, OnDestroy } from '@angular/core';
+import { Component, signal, effect, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -153,7 +153,7 @@ import { ZivCasualtyTableComponent } from './shared/components/ziv-casualty-tabl
     `,
   ],
 })
-export class AppComponent implements OnDestroy {
+export class AppComponent implements OnInit, OnDestroy {
   private systemTimeInterval: any;
 
   selectedAccidentNo = signal<string>('');
@@ -175,6 +175,10 @@ export class AppComponent implements OnDestroy {
     );
   }
 
+  ngOnInit(): void {
+    console.log('[AppComponent] ngOnInit', { accidentNo: this.selectedAccidentNo() });
+  }
+
   ngOnDestroy(): void {
     clearInterval(this.systemTimeInterval);
     this.polling.stop();
@@ -182,6 +186,7 @@ export class AppComponent implements OnDestroy {
 
   onAccidentNoChange(accidentNo: string): void {
     if (this.selectedAccidentNo() === accidentNo) return;
+    console.log('[AppComponent] accidentNo changed, starting polling', { accidentNo });
     this.selectedAccidentNo.set(accidentNo);
     this.loading.set(!!accidentNo);
     this.polling.start(accidentNo);
