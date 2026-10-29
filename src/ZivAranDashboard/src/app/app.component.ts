@@ -1,4 +1,4 @@
-import { Component, signal, computed, effect, OnInit, OnDestroy } from '@angular/core';
+import { Component, signal, effect, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -18,14 +18,12 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
-import { AranSignalRService } from './core/services/aran-signalr.service';
 import { AranHttpService } from './core/services/aran-http.service';
+import { AranPollingService } from './core/services/aran-polling.service';
+import { ZivAlertToastComponent } from './shared/components/ziv-alert-toast/ziv-alert-toast.component';
 import { ZivHeaderComponent } from './shared/components/ziv-header/ziv-header.component';
 import { ZivKpiStripComponent } from './shared/components/ziv-kpi-strip/ziv-kpi-strip.component';
 import { ZivCasualtyTableComponent } from './shared/components/ziv-casualty-table/ziv-casualty-table.component';
-import { Casualty, KpiSummary } from './core/models/aran.models';
 
 @Component({
   selector: 'app-root',
@@ -54,13 +52,19 @@ import { Casualty, KpiSummary } from './core/models/aran.models';
     ZivHeaderComponent,
     ZivKpiStripComponent,
     ZivCasualtyTableComponent,
+    ZivAlertToastComponent,
   ],
   template: `
     <div dir="rtl" class="app-container">
+      <app-ziv-alert-toast
+        [alerts]="polling.alerts()"
+        (dismiss)="polling.dismiss($event)"
+      ></app-ziv-alert-toast>
+
       <!-- Header -->
       <app-ziv-header
         [selectedAccidentNo]="selectedAccidentNo()"
-        [isConnected]="isConnected()"
+        [isConnected]="polling.isConnected()"
         [systemTime]="systemTime()"
         (accidentNoChange)="onAccidentNoChange($event)"
       ></app-ziv-header>
@@ -69,14 +73,15 @@ import { Casualty, KpiSummary } from './core/models/aran.models';
       <main class="main-content">
         <!-- KPI Strip -->
         <app-ziv-kpi-strip
-          [kpi]="kpi()"
+          [kpi]="polling.kpi()"
           [loading]="loading()"
         ></app-ziv-kpi-strip>
 
         <!-- Casualty Table -->
         <section class="casualty-section">
           <app-ziv-casualty-table
-            [casualties]="casualties()"
+            [casualties]="polling.casualties()"
+            [highlightIds]="polling.updatedCaseIds()"
             [loading]="loading()"
             [accidentNo]="selectedAccidentNo()"
             (searchChange)="onSearchChange($event)"
@@ -87,10 +92,12 @@ import { Casualty, KpiSummary } from './core/models/aran.models';
 
       <!-- Status bar -->
       <footer class="status-footer">
-        <span class="status-text">
-          {{ isConnected() ? '✓ מחובר' : '⚠ מנותק' }}
-          | אחרון עדכון: {{ lastUpdateTime() | date: 'HH:mm:ss' }}
+        <span class="status-text" [class.offline]="!polling.isConnected()">
+          {{ polling.isSyncing() ? '⟳ מעדכן...' : polling.isConnected() ? '✓ מחובר' : '⚠ מנותק - ניסיון חוזר בעוד דקה' }}
+          | עדכון אחרון: {{ polling.lastSync() ? (polling.lastSync() | date: 'HH:mm:ss') : '--:--:--' }}
+          | עדכון הבא: {{ polling.nextSync() ? (polling.nextSync() | date: 'HH:mm:ss') : '--:--:--' }}
         </span>
+        <button mat-button type="button" (click)="polling.refreshNow()" [disabled]="polling.isSyncing() || !selectedAccidentNo()">רענן עכשיו</button>
       </footer>
     </div>
   `,
@@ -128,6 +135,11 @@ import { Casualty, KpiSummary } from './core/models/aran.models';
         color: #64748b;
       }
 
+      .status-text.offline {
+        color: #dc2626;
+        font-weight: 600;
+      }
+
       .status-text {
         margin: 0 8px;
       }
@@ -141,164 +153,55 @@ import { Casualty, KpiSummary } from './core/models/aran.models';
     `,
   ],
 })
-export class AppComponent implements OnInit, OnDestroy {
-  private destroy$ = new Subject<void>();
+export class AppComponent implements OnDestroy {
   private systemTimeInterval: any;
 
-  // Signals
   selectedAccidentNo = signal<string>('');
-  casualties = signal<Casualty[]>([]);
-  kpi = signal<KpiSummary | null>(null);
-  isConnected = signal<boolean>(false);
   loading = signal<boolean>(false);
   systemTime = signal<Date>(new Date());
-  lastUpdateTime = signal<Date>(new Date());
 
   constructor(
-    private signalRService: AranSignalRService,
+    readonly polling: AranPollingService,
     private httpService: AranHttpService
   ) {
-    // Update system time every second
-    this.systemTimeInterval = setInterval(() => {
-      this.systemTime.set(new Date());
-    }, 1000);
-  }
+    this.systemTimeInterval = setInterval(() => this.systemTime.set(new Date()), 1000);
 
-  ngOnInit(): void {
-    // Initialize SignalR connection
-    this.signalRService
-      .connect()
-      .then(() => {
-        console.log('SignalR connected');
-      })
-      .catch((err) => {
-        console.error('Failed to connect SignalR:', err);
-      });
-
-    // Listen to connection status
-    this.signalRService
-      .isConnected()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((connected) => {
-        this.isConnected.set(connected);
-      });
-
-    // Listen to casualty updates
-    this.signalRService
-      .getCasualtyUpdates()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((update) => {
-        if (update && update.accidentNo === this.selectedAccidentNo()) {
-          this.casualties.set(update.casualties);
-          this.lastUpdateTime.set(update.updatedAt);
-        }
-      });
-
-    // Listen to KPI updates
-    this.signalRService
-      .getKpiUpdates()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((update) => {
-        if (update && update.accidentNo === this.selectedAccidentNo()) {
-          this.kpi.set(update.kpi);
-        }
-      });
-
-    // Listen to system events
-    this.signalRService
-      .getSystemEvents()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((event) => {
-        if (event) {
-          console.log('System event:', event);
-        }
-      });
+    // Clear the loading state once the in-flight request completes
+    effect(
+      () => {
+        if (!this.polling.isSyncing()) this.loading.set(false);
+      },
+      { allowSignalWrites: true }
+    );
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-    if (this.systemTimeInterval) {
-      clearInterval(this.systemTimeInterval);
-    }
-    this.signalRService.disconnect();
+    clearInterval(this.systemTimeInterval);
+    this.polling.stop();
   }
 
   onAccidentNoChange(accidentNo: string): void {
-    if (this.selectedAccidentNo() !== accidentNo) {
-      if (this.selectedAccidentNo()) {
-        this.signalRService
-          .leaveIncidentGroup(this.selectedAccidentNo())
-          .catch((err) => console.error('Failed to leave group:', err));
-      }
-
-      this.selectedAccidentNo.set(accidentNo);
-
-      if (accidentNo) {
-        this.loading.set(true);
-        this.signalRService
-          .joinIncidentGroup(accidentNo)
-          .then(() => {
-            return Promise.all([
-              this.httpService.getCases(accidentNo).toPromise(),
-              this.httpService.getKpis(accidentNo).toPromise(),
-            ]);
-          })
-          .then(([casualties, kpi]) => {
-            if (casualties) this.casualties.set(casualties);
-            if (kpi) this.kpi.set(kpi);
-            this.lastUpdateTime.set(new Date());
-          })
-          .catch((err) => {
-            console.error('Failed to load incident data:', err);
-          })
-          .finally(() => {
-            this.loading.set(false);
-          });
-      }
-    }
+    if (this.selectedAccidentNo() === accidentNo) return;
+    this.selectedAccidentNo.set(accidentNo);
+    this.loading.set(!!accidentNo);
+    this.polling.start(accidentNo);
   }
 
   onSearchChange(searchTerm: string): void {
-    if (!this.selectedAccidentNo()) return;
-
-    this.loading.set(true);
-    this.httpService
-      .getCases(this.selectedAccidentNo(), searchTerm)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (casualties) => {
-          this.casualties.set(casualties);
-          this.loading.set(false);
-        },
-        error: (err) => {
-          console.error('Search failed:', err);
-          this.loading.set(false);
-        },
-      });
+    this.polling.setSearch(searchTerm);
   }
 
   onSyncRequested(): void {
-    if (!this.selectedAccidentNo()) return;
+    const accidentNo = this.selectedAccidentNo();
+    if (!accidentNo) return;
 
     this.loading.set(true);
-    this.httpService
-      .syncAran({ accidentNo: this.selectedAccidentNo() })
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (result) => {
-          console.log('Sync completed:', result);
-          if (result.success) {
-            // Data will be updated via SignalR
-          } else {
-            console.error('Sync failed:', result.errorMessage);
-          }
-          this.loading.set(false);
-        },
-        error: (err) => {
-          console.error('Sync request failed:', err);
-          this.loading.set(false);
-        },
-      });
+    this.httpService.syncAran({ accidentNo }).subscribe({
+      next: () => this.polling.refreshNow(),
+      error: (err) => {
+        console.error('Sync request failed:', err);
+        this.loading.set(false);
+      },
+    });
   }
 }
