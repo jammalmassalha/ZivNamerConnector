@@ -78,13 +78,15 @@ GO
 IF OBJECT_ID(N'[dbo].[ZNACCIDENT]', N'U') IS NULL
 CREATE TABLE [dbo].[ZNACCIDENT]
 (
-    [ACCIDENT_NO]   NVARCHAR(12) NOT NULL,     -- UNFNR    מספר ארוע
-    [ACCIDENT]      NVARCHAR(3)  NULL,         -- UNFKZ    סוג תאונה
-    [MCI]           NVARCHAR(1)  NULL,         -- ZNMCI    אר"ן
-    [ACCIDENT_DATE] DATE         NULL,         -- ZNUNFDT2 תאריך אירוע
-    [ACCIDENT_TIME] TIME(0)      NULL,         -- ZUNFZT2  שעת אירוע
-    [END_DATE]      DATE         NULL,         -- ZNENDDATE תאריך סיום
-    [END_TIME]      TIME(0)      NULL,         -- ZNENDTIME שעת סיום
+    [ACCIDENT_NO]           NVARCHAR(12) NOT NULL,     -- UNFNR    מספר ארוע
+    [ACCIDENT]              NVARCHAR(3)  NULL,         -- UNFKZ    סוג תאונה
+    [MCI]                   NVARCHAR(1)  NULL,         -- ZNMCI    אר"ן
+    [ACCIDENT_DATE]         DATE         NULL,         -- ZNUNFDT2 תאריך אירוע
+    [ACCIDENT_TIME]         TIME(0)      NULL,         -- ZUNFZT2  שעת אירוע
+    [ACCIDENT_PLACE]        NVARCHAR(100)      NULL,         -- ZUNFZT2  שעת אירוע
+    [ACCIDENT_DESCRIPTION]  NVARCHAR(100)      NULL,         -- ZUNFZT2  שעת אירוע
+    [END_DATE]              DATE         NULL,         -- ZNENDDATE תאריך סיום
+    [END_TIME]              TIME(0)      NULL,         -- ZNENDTIME שעת סיום
     CONSTRAINT [PK_sap_ZNACCIDENT] PRIMARY KEY CLUSTERED ([ACCIDENT_NO])
 );
 GO
