@@ -25,9 +25,12 @@ interface UpdateTriageRequest {
   providedIn: 'root',
 })
 export class AranHttpService {
-  private readonly apiUrl = `${environment.apiUrl}/aran`;
+  private readonly apiUrl: string;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) {
+    this.apiUrl = `${environment.apiUrl}/aran`;
+    console.log('AranHttpService initialized with apiUrl:', this.apiUrl);
+  }
 
   /**
    * Get active casualties for an incident

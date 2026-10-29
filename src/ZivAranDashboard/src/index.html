@@ -3,15 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <title>המרכז הרפואי זיו - אר״ן מעקב</title>
+    <!-- Dynamic base href - will be set by Angular during build with --base-href -->
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1e4e9d" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    
+    <!-- Google Fonts: Material Symbols, Assistant Hebrew, and monospace -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&family=Assistant:wght@400;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&family=Material+Icons:wght@100..700&family=Assistant:wght@200;300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
+    
+    <!-- Fallback for Material Icons if CDN fails -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    
+    <!-- No-script fallback for accessibility -->
+    <noscript>
+      <p style="text-align: center; margin-top: 50px; font-family: sans-serif;">
+        אפליקציה זו דורשת JavaScript כדי לפעול. אנא אפשר JavaScript בדפדפן שלך.
+      </p>
+    </noscript>
   </head>
   <body>
     <app-root></app-root>
