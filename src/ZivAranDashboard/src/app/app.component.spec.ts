@@ -11,7 +11,7 @@ describe('Dashboard polling startup', () => {
   let fixture: ComponentFixture<AppComponent>;
   let http: HttpTestingController;
   let log: jasmine.Spy;
-  const pollUrl = `${environment.apiUrl}/aran/poll`;
+  const pollUrl = `${environment.apiUrl}/Aran/poll`;
   const response = { casualties: [], kpi: null, serverTime: '2026-01-01T00:00:00Z' };
 
   beforeEach(() => {
