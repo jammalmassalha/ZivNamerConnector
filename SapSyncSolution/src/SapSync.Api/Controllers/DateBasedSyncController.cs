@@ -55,10 +55,10 @@ public sealed class DateBasedSyncController : ControllerBase
                 });
             }
 
-            var dateFilter = _dateBasedSyncService.GenerateCombinedDateFilter(daysBack);
-            _logger.LogInformation("Syncing table {TableName} with date filter: {DateFilter}", tableName, dateFilter);
+            _logger.LogInformation("Syncing table {TableName} with dual-date filter (daysBack={DaysBack})", tableName, daysBack);
 
-            var request = new TableSyncRequest { FilterCondition = dateFilter };
+            // Use LookbackDays to trigger DeltaSyncFilterBuilder which uses table's configured date fields
+            var request = new TableSyncRequest { LookbackDays = daysBack };
             var result = await _tableSyncService.SyncTableAsync(tableName, request, cancellationToken);
 
             return Ok(result);
@@ -182,8 +182,7 @@ public sealed class DateBasedSyncController : ControllerBase
     {
         try
         {
-            var dateFilter = _dateBasedSyncService.GenerateCombinedDateFilter(daysBack);
-            _logger.LogInformation("Syncing all tables with date filter: {DateFilter}", dateFilter);
+            _logger.LogInformation("Syncing all tables with dual-date filter (daysBack={DaysBack})", daysBack);
 
             var results = new List<TableSyncResult>();
 
@@ -191,7 +190,8 @@ public sealed class DateBasedSyncController : ControllerBase
             {
                 try
                 {
-                    var request = new TableSyncRequest { FilterCondition = dateFilter };
+                    // Use LookbackDays to trigger DeltaSyncFilterBuilder which uses each table's configured date fields
+                    var request = new TableSyncRequest { LookbackDays = daysBack };
                     var result = await _tableSyncService.SyncTableAsync(tableName, request, cancellationToken);
                     results.Add(result);
                 }

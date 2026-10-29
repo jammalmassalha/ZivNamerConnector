@@ -138,11 +138,18 @@ public sealed class TableSyncService : ITableSyncService
         }
 
         // Otherwise, use explicit FilterCondition or table's default
-        if (!string.IsNullOrWhiteSpace(overrides?.FilterCondition))
+        var filter = !string.IsNullOrWhiteSpace(overrides?.FilterCondition)
+            ? overrides.FilterCondition
+            : definition.FilterCondition;
+
+        // Replace @FromDate token if present (for dual-date filters in config)
+        if (!string.IsNullOrWhiteSpace(filter) && filter.Contains("@FromDate", StringComparison.Ordinal))
         {
-            return overrides.FilterCondition;
+            var fromDate = DateTime.Today.AddDays(-1).ToString("yyyyMMdd");
+            filter = filter.Replace("@FromDate", fromDate, StringComparison.Ordinal);
+            _logger.LogInformation("Resolved @FromDate token to {FromDate} in filter", fromDate);
         }
 
-        return definition.FilterCondition;
+        return filter;
     }
 }
