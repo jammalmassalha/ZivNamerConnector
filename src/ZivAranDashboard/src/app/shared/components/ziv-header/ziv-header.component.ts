@@ -1,24 +1,21 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
-import { FormsModule } from '@angular/forms';
+import { IncidentOption } from '../../../core/models/aran.models';
 
 @Component({
   selector: 'app-ziv-header',
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
     MatToolbarModule,
     MatSelectModule,
     MatFormFieldModule,
-    MatInputModule,
     MatIconModule,
     MatBadgeModule,
     MatButtonModule,
@@ -36,14 +33,17 @@ import { FormsModule } from '@angular/forms';
         <div class="controls-section">
           <div class="incident-selector">
             <mat-form-field appearance="fill" [floatLabel]="'always'" dir="rtl">
-              <mat-label>סינון לפי אירוע אר״ן</mat-label>
-              <input
-                matInput
-                placeholder="הקלד מספר אירוע..."
-                [(ngModel)]="accidentNo"
-                (change)="onAccidentNoChange()"
-                (keydown.enter)="onAccidentNoChange()"
-              />
+              <mat-label>בחירת אירוע אר״ן</mat-label>
+              <mat-select
+                [value]="selectedAccidentNo"
+                (selectionChange)="onAccidentNoChange($event.value)"
+                placeholder="בחר אירוע"
+              >
+                <mat-option *ngFor="let incident of incidents" [value]="incident.accidentNo">
+                  {{ incident.accidentNo }}
+                  <span *ngIf="incident.accidentPlace"> — {{ incident.accidentPlace }}</span>
+                </mat-option>
+              </mat-select>
             </mat-form-field>
           </div>
 
@@ -52,6 +52,7 @@ import { FormsModule } from '@angular/forms';
               mat-icon-button
               [matBadge]="isConnected ? '' : '!'"
               matBadgeColor="warn"
+              [class.connection-pulse]="connectionPulse"
               [attr.aria-label]="isConnected ? 'מחובר' : 'מנותק'"
             >
               <mat-icon [class.connected]="isConnected">
@@ -141,6 +142,14 @@ import { FormsModule } from '@angular/forms';
         color: #16a34a;
       }
 
+      .connection-pulse {
+        animation: connectionPulse 1.2s ease-out;
+      }
+
+      @keyframes connectionPulse {
+        50% { transform: scale(1.12); color: #f15a24; }
+      }
+
       @media (max-width: 768px) {
         .hospital-name {
           display: none;
@@ -153,21 +162,15 @@ import { FormsModule } from '@angular/forms';
     `,
   ],
 })
-export class ZivHeaderComponent implements OnChanges {
+export class ZivHeaderComponent {
   @Input() selectedAccidentNo: string = '';
+  @Input() incidents: IncidentOption[] = [];
   @Input() isConnected: boolean = false;
+  @Input() connectionPulse: boolean = false;
   @Input() systemTime: Date = new Date();
   @Output() accidentNoChange = new EventEmitter<string>();
 
-  accidentNo: string = '';
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['selectedAccidentNo']) {
-      this.accidentNo = this.selectedAccidentNo;
-    }
-  }
-
-  onAccidentNoChange(): void {
-    this.accidentNoChange.emit(this.accidentNo);
+  onAccidentNoChange(accidentNo: string): void {
+    this.accidentNoChange.emit(accidentNo);
   }
 }

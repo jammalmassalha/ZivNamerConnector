@@ -62,6 +62,7 @@ CREATE TABLE [dbo].[NBEW]
     [MOVEMNT_DATE]  DATE         NULL,         -- BWIDT תאריך העברה
     [MOVEMNT_TIME]  TIME(0)      NULL,         -- BWIZT שעת העברה
     [MOVEMNT_CTGRY] NVARCHAR(1)  NULL,         -- BEWTY קטגוריית העברה
+    [MOVEMENT_TYPE] NVARCHAR(3)  NULL,         -- BWART סוג העברה
     [ACCIDENT_NO]   NVARCHAR(12) NULL,         -- UNFNR מספר קובץ / אירוע
     [DEPARTMENT]    NVARCHAR(8)  NULL,         -- ORGFA מחלקה רפואית עבור מקרה
     [NURS_TREAT_OU] NVARCHAR(8)  NULL,         -- ORGPF מחלקה סיעודית עבור מקרה
@@ -69,6 +70,9 @@ CREATE TABLE [dbo].[NBEW]
     [CANCEL_USER]   NVARCHAR(12) NULL,         -- STUSR בוטל ע"י
     CONSTRAINT [PK_sap_NBEW] PRIMARY KEY CLUSTERED ([PATCASEID], [MOVEMNT_SEQNO])
 );
+GO
+IF COL_LENGTH(N'dbo.NBEW', N'MOVEMENT_TYPE') IS NULL
+    ALTER TABLE [dbo].[NBEW] ADD [MOVEMENT_TYPE] NVARCHAR(3) NULL;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_NBEW_ACCIDENT_NO' AND object_id = OBJECT_ID(N'[dbo].[NBEW]'))
     CREATE INDEX [IX_sap_NBEW_ACCIDENT_NO] ON [dbo].[NBEW] ([ACCIDENT_NO]);

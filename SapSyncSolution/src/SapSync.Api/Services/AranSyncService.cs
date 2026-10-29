@@ -72,6 +72,23 @@ public sealed class AranSyncService
                             UpdatedAt = DateTime.UtcNow
                         }, cancellationToken);
 
+                    foreach (var update in incidentGroup.Where(c =>
+                                 c.MovementChanged && (c.MovementCategory is "1" or "3")))
+                    {
+                        await _hubContext.Clients
+                            .Group($"incident_{incidentGroup.Key}")
+                            .SendAsync("ReceiveAranPatientUpdate", new
+                            {
+                                AccidentNo = incidentGroup.Key,
+                                CaseId = update.CaseNumber,
+                                PatientId = update.PatientID,
+                                MovementCategory = update.MovementCategory,
+                                CurrentStatus = update.CurrentMovement,
+                                Location = update.CurrentLocation,
+                                UpdatedAt = DateTime.UtcNow
+                            }, cancellationToken);
+                    }
+
                     // Also send KPI summary for this incident
                     var kpi = CalculateKpi(incidentGroup);
                     await _hubContext.Clients
@@ -107,7 +124,7 @@ public sealed class AranSyncService
         // Build dynamic WHERE clause
         var whereConditions = new List<string> { "n.STORN = ' ' AND n.FSTORN = ' '" };
         if (!string.IsNullOrEmpty(filterAccidentNo))
-            whereConditions.Add($"n.PATNR = @FilterAccidentNo");
+            whereConditions.Add("EXISTS (SELECT 1 FROM [dbo].[ZNMCICASE] z WHERE z.PATCASEID = n.FALNR AND z.ACCIDENT_NO = @FilterAccidentNo)");
         if (fromDate.HasValue)
             whereConditions.Add($"n.BWIDT >= @FromDate");
 
@@ -125,13 +142,22 @@ public sealed class AranSyncService
                 n.BWITM AS MovementTime,
                 n.ZIMMR AS Room,
                 n.BETT AS Bed,
-                nfkl.ACCIDENT_NO AS AccidentNo,
-                nfkl.TRIAGE_STATUS AS TriageStatus,
+                COALESCE(zc.ACCIDENT_NO, nfkl.AccidentNo) AS AccidentNo,
+                nfkl.TriageStatus,
+                nfkl.CurrentMovementCode AS PreviousMovementCode,
+                CASE WHEN nfkl.CaseNumber IS NULL OR COALESCE(nfkl.CurrentMovementCode, '') <> CONCAT(n.BEWTY, '|', n.BWART)
+                     THEN 1 ELSE 0 END AS MovementChanged,
                 CASE 
                     WHEN ROW_NUMBER() OVER (PARTITION BY n.FALNR ORDER BY n.BWIDT DESC, n.LFDBEW DESC) = 1 
                     THEN 1 ELSE 0 
                 END AS IsLatestMovement
-            FROM [sap].[N_FALL_BEW] n
+            FROM [dbo].[N_FALL_BEW] n
+            OUTER APPLY (
+                SELECT TOP (1) z.ACCIDENT_NO
+                FROM [dbo].[ZNMCICASE] z
+                WHERE z.PATCASEID = n.FALNR
+                ORDER BY z.ACCIDENT_NO
+            ) zc
             LEFT JOIN [dbo].[PATIENT_MONITORING] nfkl ON n.FALNR = nfkl.CaseNumber
             WHERE {whereClause}
             ORDER BY n.BWIDT DESC, n.LFDBEW DESC";
@@ -152,6 +178,7 @@ public sealed class AranSyncService
             var bewty = reader.IsDBNull(reader.GetOrdinal("BEWTY")) ? null : reader.GetString(reader.GetOrdinal("BEWTY"));
             var bwart = reader.IsDBNull(reader.GetOrdinal("BWART")) ? null : reader.GetString(reader.GetOrdinal("BWART"));
             var classCode = reader.IsDBNull(reader.GetOrdinal("PatientTypeCode")) ? null : reader.GetString(reader.GetOrdinal("PatientTypeCode"));
+            var movementCategory = reader.IsDBNull(reader.GetOrdinal("BEWTY")) ? null : reader.GetString(reader.GetOrdinal("BEWTY")).Trim();
 
             var movementDesc = SapMovementMap.TryGetMovementDescription(bewty, bwart);
             var patientTypeDesc = SapMovementMap.TryGetPatientType(classCode);
@@ -171,6 +198,8 @@ public sealed class AranSyncService
                 AccidentNo = reader.IsDBNull(reader.GetOrdinal("AccidentNo")) ? null : reader.GetString(reader.GetOrdinal("AccidentNo")),
                 CurrentMovement = movementDesc,
                 CurrentMovementCode = $"{bewty}|{bwart}",
+                MovementCategory = movementCategory,
+                MovementChanged = reader.GetInt32(reader.GetOrdinal("MovementChanged")) == 1,
                 TriageStatus = reader.IsDBNull(reader.GetOrdinal("TriageStatus")) ? null : reader.GetString(reader.GetOrdinal("TriageStatus")),
                 PatientType = patientTypeDesc,
                 CurrentLocation = location,
@@ -295,6 +324,8 @@ public sealed class AranSyncService
         public string? AccidentNo { get; set; }
         public string? CurrentMovement { get; set; }
         public string? CurrentMovementCode { get; set; }
+        public string? MovementCategory { get; set; }
+        public bool MovementChanged { get; set; }
         public string? CurrentLocation { get; set; }
         public string? TriageStatus { get; set; }
         public string? PatientType { get; set; }

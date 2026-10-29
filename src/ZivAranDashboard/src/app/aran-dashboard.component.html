@@ -1,0 +1,189 @@
+<div class="aran-app" dir="rtl">
+  <app-ziv-header
+    [selectedAccidentNo]="selectedIncident()?.accidentNo ?? ''"
+    [incidents]="incidents()"
+    [isConnected]="isConnected()"
+    [connectionPulse]="connectionPulse()"
+    [systemTime]="systemTime()"
+    (accidentNoChange)="onIncidentChange($event)"
+  ></app-ziv-header>
+
+  <main class="aran-main">
+    <div class="aran-incident-banner">
+      <div>
+        <span class="aran-eyebrow">אירוע נבחר</span>
+        <h1>{{ selectedIncident()?.accidentPlace || 'לוח ניטור אר״ן' }}</h1>
+      </div>
+      <div class="aran-incident-meta">
+        <strong>{{ selectedIncident()?.accidentNo || 'אין אירוע זמין' }}</strong>
+        <span *ngIf="selectedIncident()?.accidentDate as date">
+          {{ date | date: 'dd/MM/yyyy' }}
+          {{ selectedIncident()?.accidentTime }}
+        </span>
+      </div>
+    </div>
+
+    <div *ngIf="errorMessage()" class="aran-error" role="alert">{{ errorMessage() }}</div>
+
+    <section class="aran-kpis" aria-label="סיכום נפגעים">
+      <article class="aran-kpi aran-kpi-total">
+        <span>סה״כ נפגעים</span><strong>{{ kpis().total }}</strong>
+      </article>
+      <article class="aran-kpi aran-kpi-red">
+        <span>T1 — קשה / מיידי</span><strong>{{ kpis().red }}</strong>
+      </article>
+      <article class="aran-kpi aran-kpi-yellow">
+        <span>T2 — בינוני</span><strong>{{ kpis().yellow }}</strong>
+      </article>
+      <article class="aran-kpi aran-kpi-green">
+        <span>T3 — קל</span><strong>{{ kpis().green }}</strong>
+      </article>
+      <article class="aran-kpi aran-kpi-admitted">
+        <span>אושפזו / הועברו</span><strong>{{ kpis().admitted }}</strong>
+      </article>
+      <article class="aran-kpi aran-kpi-discharged">
+        <span>שוחררו</span><strong>{{ kpis().discharged }}</strong>
+      </article>
+    </section>
+
+    <section class="aran-patients-card">
+      <div class="aran-table-toolbar">
+        <div>
+          <h2>נפגעים באירוע</h2>
+          <span class="aran-result-count">{{ filteredCases().length }} תיקים</span>
+        </div>
+        <label class="aran-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            [value]="searchText()"
+            (input)="searchText.set($any($event.target).value)"
+            placeholder="חיפוש תיק, מטופל, מיקום או פציעה"
+            aria-label="חיפוש נפגעים"
+          />
+        </label>
+      </div>
+
+      <div class="aran-filters" aria-label="סינון נפגעים">
+        <button type="button" [class.active]="triageFilter() === 'ALL'" (click)="setFilter('ALL')">הכל</button>
+        <button type="button" [class.active]="triageFilter() === 'RED'" (click)="setFilter('RED')">T1 אדום</button>
+        <button type="button" [class.active]="triageFilter() === 'YELLOW'" (click)="setFilter('YELLOW')">T2 צהוב</button>
+        <button type="button" [class.active]="triageFilter() === 'GREEN'" (click)="setFilter('GREEN')">T3 ירוק</button>
+        <button type="button" [class.active]="triageFilter() === 'ADMITTED'" (click)="setFilter('ADMITTED')">אושפזו</button>
+      </div>
+
+      <div class="aran-table-scroll">
+        <table class="aran-table">
+          <thead>
+            <tr>
+              <th>מס׳ תיק</th>
+              <th>מטופל</th>
+              <th>מיון</th>
+              <th>פציעה עיקרית</th>
+              <th>מצב נוכחי</th>
+              <th>מחלקה / מיקום</th>
+              <th>עדכון אחרון</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let patient of filteredCases()"
+              [class.aran-row-updated]="highlightedCaseIds().has(patient.caseId)"
+              (click)="openCase(patient)"
+              tabindex="0"
+              (keydown.enter)="openCase(patient)"
+            >
+              <td class="aran-case-number">{{ patient.caseId }}</td>
+              <td>
+                <strong>{{ patient.fullName || ((patient.firstName || '') + ' ' + (patient.lastName || '')) || 'לא ידוע' }}</strong>
+                <small>{{ patient.patientId || '—' }}</small>
+              </td>
+              <td>
+                <span class="aran-triage" [attr.data-triage]="patient.triageCode || 'NONE'">
+                  {{ patient.triageLabel || 'לא סווג' }}
+                </span>
+              </td>
+              <td>{{ patient.mainInjury || '—' }}</td>
+              <td>{{ patient.currentStatus || '—' }}</td>
+              <td>{{ patient.location || patient.department || '—' }}</td>
+              <td>{{ patient.lastMovementTime ? (patient.lastMovementTime | date: 'HH:mm dd/MM') : '—' }}</td>
+              <td>
+                <button class="aran-details-button" type="button" (click)="openCase(patient); $event.stopPropagation()">
+                  פרטי תיק
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="!isLoading() && filteredCases().length === 0">
+              <td colspan="8" class="aran-empty">
+                {{ selectedIncident() ? 'לא נמצאו נפגעים התואמים לסינון' : 'בחר אירוע אר״ן להצגת נפגעים' }}
+              </td>
+            </tr>
+            <tr *ngIf="isLoading()">
+              <td colspan="8" class="aran-empty">טוען נתונים…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="aran-footer">
+      <span [class.aran-offline]="!isConnected()" [class.aran-pulse]="connectionPulse()">
+        <span class="aran-connection-dot"></span>
+        {{ isConnected() ? 'חיבור בזמן אמת פעיל' : 'אין חיבור בזמן אמת' }}
+      </span>
+      <span>שעון מערכת: {{ systemTime() | date: 'HH:mm:ss' }}</span>
+    </footer>
+  </main>
+
+  <div *ngIf="activeCase() as patient" class="aran-drawer-backdrop" (click)="closeDrawer()">
+    <aside
+      class="aran-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="פרטי תיק נפגע"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="aran-drawer-header">
+        <div>
+          <span class="aran-eyebrow">תיק נפגע</span>
+          <h2>{{ patient.fullName || patient.caseId }}</h2>
+        </div>
+        <button class="aran-close-button" type="button" aria-label="סגירה" (click)="closeDrawer()">×</button>
+      </header>
+
+      <section class="aran-drawer-section aran-demographics">
+        <h3>פרטי מטופל ואירוע</h3>
+        <dl>
+          <dt>מספר תיק</dt><dd>{{ patient.caseId }}</dd>
+          <dt>מספר מטופל</dt><dd>{{ patient.patientId || '—' }}</dd>
+          <dt>מספר זהות</dt><dd>{{ patient.nationalId || '—' }}</dd>
+          <dt>תאריך לידה</dt><dd>{{ patient.dateOfBirth ? (patient.dateOfBirth | date: 'dd/MM/yyyy') : '—' }}</dd>
+          <dt>אירוע</dt><dd>{{ selectedIncident()?.accidentNo }} — {{ selectedIncident()?.accidentPlace || '—' }}</dd>
+          <dt>מיון</dt><dd>{{ patient.triageLabel || 'לא סווג' }}</dd>
+          <dt>פציעה עיקרית</dt><dd>{{ patient.mainInjury || '—' }}</dd>
+        </dl>
+      </section>
+
+      <section class="aran-drawer-section">
+        <h3>היסטוריית תנועות</h3>
+        <ol class="aran-movement-list">
+          <li *ngFor="let movement of patient.movements">
+            <span class="aran-movement-sequence">{{ movement.sequenceNumber }}</span>
+            <div>
+              <strong>{{ movement.movementType || movement.movementCode || 'תנועה' }}</strong>
+              <span>{{ movement.timestamp ? (movement.timestamp | date: 'dd/MM/yyyy HH:mm') : '—' }}</span>
+              <small>{{ movement.medicalDept || movement.nursingUnit || '—' }}</small>
+            </div>
+          </li>
+          <li *ngIf="patient.movements.length === 0" class="aran-empty">אין היסטוריית תנועות</li>
+        </ol>
+      </section>
+
+      <section class="aran-drawer-section">
+        <h3>נתוני JSON</h3>
+        <pre class="aran-json">{{ rawCaseJson(patient) }}</pre>
+      </section>
+    </aside>
+  </div>
+</div>

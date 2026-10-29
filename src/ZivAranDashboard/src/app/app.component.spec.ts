@@ -1,95 +1,63 @@
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { of, Subject } from 'rxjs';
 import { AppComponent } from './app.component';
-import { httpLoggingInterceptor } from './core/interceptors/http-logging.interceptor';
-import { POLL_INTERVAL_MS } from './core/services/aran-polling.service';
-import { environment } from '../environments/environment';
+import { AranService } from './core/services/aran.service';
+import { AranPatientUpdate } from './core/models/aran.models';
 
-describe('Dashboard polling startup', () => {
+describe('ARAN dashboard startup', () => {
   let fixture: ComponentFixture<AppComponent>;
-  let http: HttpTestingController;
-  let log: jasmine.Spy;
-  const pollUrl = `${environment.apiUrl}/Aran/poll`;
-  const response = { casualties: [], kpi: null, serverTime: '2026-01-01T00:00:00Z' };
+  let aranService: jasmine.SpyObj<AranService>;
+  const patientUpdates = new Subject<AranPatientUpdate>();
+  const connectionStatus = new Subject<boolean>();
+  const latestPayload = {
+    incidents: [
+      { accidentNo: 'ARAN-2', accidentPlace: 'צפת', accidentDate: '2026-10-29' },
+      { accidentNo: 'ARAN-1', accidentPlace: 'חצור', accidentDate: '2026-10-28' },
+    ],
+    selectedIncident: { accidentNo: 'ARAN-2', accidentPlace: 'צפת', accidentDate: '2026-10-29' },
+    cases: [],
+  };
 
   beforeEach(() => {
-    log = spyOn(console, 'log');
+    aranService = jasmine.createSpyObj<AranService>(
+      'AranService',
+      ['getLatestIncidents', 'getIncidentCases', 'connect', 'selectIncident', 'disconnect'],
+      {
+        patientUpdates$: patientUpdates.asObservable(),
+        connectionStatus$: connectionStatus.asObservable(),
+      }
+    );
+    aranService.getLatestIncidents.and.returnValue(of(latestPayload));
+    aranService.getIncidentCases.and.returnValue(of([]));
+    aranService.connect.and.resolveTo();
+    aranService.selectIncident.and.resolveTo();
+    aranService.disconnect.and.resolveTo();
+
     TestBed.configureTestingModule({
       imports: [AppComponent, NoopAnimationsModule],
-      providers: [
-        provideHttpClient(withInterceptors([httpLoggingInterceptor])),
-        provideHttpClientTesting(),
-      ],
+      providers: [{ provide: AranService, useValue: aranService }],
     });
-    http = TestBed.inject(HttpTestingController);
-  });
-
-  function createDashboard(): HTMLInputElement {
     fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
-    tick(0);
-    fixture.detectChanges();
-    return fixture.nativeElement.querySelector('app-ziv-header input');
-  }
-
-  afterEach(() => {
-    fixture.destroy();
-    http.verify();
   });
 
-  it('keeps an unsubmitted incident number across clock updates without polling', fakeAsync(() => {
-    const input = createDashboard();
-    input.value = 'INC001';
-    input.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
+  afterEach(() => fixture.destroy());
 
-    tick(2000);
-    fixture.detectChanges();
+  it('automatically selects the latest incident returned by the API', () => {
+    const dashboard = fixture.nativeElement.querySelector('app-aran-dashboard');
 
-    expect(input.value).toBe('INC001');
-    expect(fixture.componentInstance.selectedAccidentNo()).toBe('');
-    http.expectNone(pollUrl);
-    fixture.destroy();
-  }));
+    expect(aranService.getLatestIncidents).toHaveBeenCalled();
+    expect(dashboard.textContent).toContain('ARAN-2');
+    expect(aranService.selectIncident).toHaveBeenCalledWith('ARAN-2');
+  });
 
-  for (const submitEvent of ['change', 'keydown']) {
-    it(`starts and logs polling on ${submitEvent}, then polls every minute`, fakeAsync(() => {
-      const input = createDashboard();
-      input.value = 'INC001';
-      input.dispatchEvent(new Event('input'));
-      fixture.detectChanges();
-      tick(1000);
-      fixture.detectChanges();
+  it('loads cases and joins the group when another incident is selected', () => {
+    const dashboard = fixture.debugElement.children[0].componentInstance;
 
-      input.dispatchEvent(submitEvent === 'keydown'
-        ? new KeyboardEvent('keydown', { key: 'Enter' })
-        : new Event('change'));
-      fixture.detectChanges();
-      tick(0);
+    dashboard.onIncidentChange('ARAN-1');
 
-      const request = http.expectOne(pollUrl);
-      expect(request.request.method).toBe('POST');
-      expect(request.request.body).toEqual({ accidentNo: 'INC001', search: null });
-      expect(log).toHaveBeenCalledWith(
-        `[HTTP →] POST ${pollUrl}`, { accidentNo: 'INC001', search: null }
-      );
-      request.flush(response);
-      expect(log).toHaveBeenCalledWith('[AranPolling] response for', 'INC001', response);
-      expect(log).toHaveBeenCalledWith(
-        jasmine.stringMatching(/^\[HTTP ←\] POST /), response
-      );
-
-      // Blurring after Enter must not restart polling.
-      input.dispatchEvent(new Event('change'));
-      fixture.detectChanges();
-      tick(0);
-      http.expectNone(pollUrl);
-
-      tick(POLL_INTERVAL_MS);
-      http.expectOne(pollUrl).flush(response);
-      fixture.destroy();
-    }));
-  }
+    expect(aranService.selectIncident).toHaveBeenCalledWith('ARAN-1');
+    expect(aranService.getIncidentCases).toHaveBeenCalledWith('ARAN-1');
+  });
 });
