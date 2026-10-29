@@ -9,13 +9,13 @@
 SET NOCOUNT ON;
 GO
 
-IF SCHEMA_ID(N'sap') IS NULL
-    EXEC (N'CREATE SCHEMA [sap] AUTHORIZATION [dbo];');
+IF SCHEMA_ID(N'dbo') IS NULL
+    EXEC (N'CREATE SCHEMA [dbo] AUTHORIZATION [dbo];');
 GO
 
 /* N_FALL_BEW - תזוזת המקרים המפורטת (detailed case movements) */
-IF OBJECT_ID(N'[sap].[N_FALL_BEW]', N'U') IS NULL
-CREATE TABLE [sap].[N_FALL_BEW]
+IF OBJECT_ID(N'[dbo].[N_FALL_BEW]', N'U') IS NULL
+CREATE TABLE [dbo].[N_FALL_BEW]
 (
     [MANDT]           NVARCHAR(3)      NOT NULL,    -- MANDT        Client
     [FALNR]           NVARCHAR(10)     NOT NULL,    -- FALNR        Case Number (מספר מקרה)
@@ -51,20 +51,20 @@ CREATE TABLE [sap].[N_FALL_BEW]
 GO
 
 /* Non-clustered indexes for common queries */
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_N_FALL_BEW_FALNR_STORN' AND object_id = OBJECT_ID(N'[sap].[N_FALL_BEW]'))
-    CREATE INDEX [IX_sap_N_FALL_BEW_FALNR_STORN] ON [sap].[N_FALL_BEW] ([FALNR], [STORN], [FSTORN]) INCLUDE ([LFDBEW], [BWIDT], [BEWTY], [BWART]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_N_FALL_BEW_FALNR_STORN' AND object_id = OBJECT_ID(N'[dbo].[N_FALL_BEW]'))
+    CREATE INDEX [IX_sap_N_FALL_BEW_FALNR_STORN] ON [dbo].[N_FALL_BEW] ([FALNR], [STORN], [FSTORN]) INCLUDE ([LFDBEW], [BWIDT], [BEWTY], [BWART]);
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_N_FALL_BEW_FALAR_BEWTY' AND object_id = OBJECT_ID(N'[sap].[N_FALL_BEW]'))
-    CREATE INDEX [IX_sap_N_FALL_BEW_FALAR_BEWTY] ON [sap].[N_FALL_BEW] ([FALAR], [BEWTY], [BWART]) INCLUDE ([BWIDT]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_N_FALL_BEW_FALAR_BEWTY' AND object_id = OBJECT_ID(N'[dbo].[N_FALL_BEW]'))
+    CREATE INDEX [IX_sap_N_FALL_BEW_FALAR_BEWTY] ON [dbo].[N_FALL_BEW] ([FALAR], [BEWTY], [BWART]) INCLUDE ([BWIDT]);
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_N_FALL_BEW_BWIDT' AND object_id = OBJECT_ID(N'[sap].[N_FALL_BEW]'))
-    CREATE INDEX [IX_sap_N_FALL_BEW_BWIDT] ON [sap].[N_FALL_BEW] ([BWIDT]) INCLUDE ([FALNR], [BEWTY], [STORN]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_N_FALL_BEW_BWIDT' AND object_id = OBJECT_ID(N'[dbo].[N_FALL_BEW]'))
+    CREATE INDEX [IX_sap_N_FALL_BEW_BWIDT] ON [dbo].[N_FALL_BEW] ([BWIDT]) INCLUDE ([FALNR], [BEWTY], [STORN]);
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_N_FALL_BEW_SyncedAt' AND object_id = OBJECT_ID(N'[sap].[N_FALL_BEW]'))
-    CREATE INDEX [IX_sap_N_FALL_BEW_SyncedAt] ON [sap].[N_FALL_BEW] ([SyncedAt]) INCLUDE ([FALNR], [STORN]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_sap_N_FALL_BEW_SyncedAt' AND object_id = OBJECT_ID(N'[dbo].[N_FALL_BEW]'))
+    CREATE INDEX [IX_sap_N_FALL_BEW_SyncedAt] ON [dbo].[N_FALL_BEW] ([SyncedAt]) INCLUDE ([FALNR], [STORN]);
 GO
 
 /* PATIENT_MONITORING - aggregated patient dashboard state (real-time ARAN monitoring) */
@@ -83,7 +83,7 @@ CREATE TABLE [dbo].[PATIENT_MONITORING]
     [LastMovementTime]    DATETIME2(3)     NULL,                   -- BWIDT + BWITM
     [UpdatedAt]           DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     
-    CONSTRAINT [FK_PATIENT_MONITORING_CaseNumber] FOREIGN KEY ([CaseNumber]) REFERENCES [sap].[NFAL] ([PATCASEID])
+    CONSTRAINT [FK_PATIENT_MONITORING_CaseNumber] FOREIGN KEY ([CaseNumber]) REFERENCES [dbo].[NFAL] ([PATCASEID])
 );
 GO
 
