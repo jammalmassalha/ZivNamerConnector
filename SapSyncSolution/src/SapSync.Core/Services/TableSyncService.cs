@@ -18,8 +18,8 @@ public sealed class TableSyncService : ITableSyncService
     private readonly ILogger<TableSyncService> _logger;
     private readonly Dictionary<string, SyncTableDefinition> _tables;
 
-    public TableSyncService(ISapSyncOrchestrator orchestrator, IOptions<SyncTablesSettings> settings, ILogger<TableSyncService> logger)
-        : this(orchestrator, new DeltaSyncFilterBuilder(logger), settings, logger)
+    public TableSyncService(ISapSyncOrchestrator orchestrator, IOptions<SyncTablesSettings> settings, ILogger<TableSyncService> logger, ILoggerFactory loggerFactory)
+        : this(orchestrator, new DeltaSyncFilterBuilder(loggerFactory.CreateLogger<DeltaSyncFilterBuilder>()), settings, logger)
     {
     }
 
