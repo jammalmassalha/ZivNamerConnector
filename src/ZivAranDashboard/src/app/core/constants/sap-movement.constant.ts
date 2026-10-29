@@ -125,22 +125,3 @@ export const ZIV_COLORS = {
   TEXT_PRIMARY: '#0F172A',        // High-contrast Typography
 } as const;
 
-// SignalR hub configuration
-export const SIGNALR_CONFIG = {
-  HUB_URL: '/hubs/aran',
-  METHODS: {
-    JOIN_INCIDENT: 'JoinIncidentGroup',
-    LEAVE_INCIDENT: 'LeaveIncidentGroup',
-    BROADCAST_UPDATE: 'BroadcastCasualtyUpdate',
-    BROADCAST_KPI: 'BroadcastKpiUpdate',
-    BROADCAST_PATIENT: 'BroadcastPatientDetail',
-  },
-  LISTENERS: {
-    RECEIVE_UPDATES: 'ReceiveAranUpdates',
-    RECEIVE_KPI: 'ReceiveKpiUpdate',
-    RECEIVE_PATIENT: 'ReceivePatientDetail',
-    RECEIVE_EVENT: 'ReceiveSystemEvent',
-    GROUP_JOINED: 'NotifyGroupJoined',
-    GROUP_LEFT: 'NotifyGroupLeft',
-  },
-} as const;

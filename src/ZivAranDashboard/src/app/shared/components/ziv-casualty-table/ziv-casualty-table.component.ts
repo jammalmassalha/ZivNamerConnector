@@ -116,12 +116,22 @@ import { Casualty } from '../../../core/models/aran.models';
         </ng-container>
 
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+            [class.row-updated]="highlightIds.has(row.caseNumber)"></tr>
       </table>
     </mat-card>
   `,
   styles: [
     `
+      .row-updated {
+        animation: rowFlash 5s ease-out;
+      }
+
+      @keyframes rowFlash {
+        0%, 20% { background-color: #fef9c3; box-shadow: inset -4px 0 0 #eab308; }
+        100% { background-color: transparent; box-shadow: none; }
+      }
+
       mat-card {
         border: 1px solid #e2e8f0;
         border-radius: 4px;
@@ -238,6 +248,7 @@ import { Casualty } from '../../../core/models/aran.models';
 export class ZivCasualtyTableComponent {
   @Input() casualties: Casualty[] = [];
   @Input() loading: boolean = false;
+  @Input() highlightIds: Set<string> = new Set();
   @Input() accidentNo: string = '';
   @Output() searchChange = new EventEmitter<string>();
   @Output() syncRequested = new EventEmitter<void>();

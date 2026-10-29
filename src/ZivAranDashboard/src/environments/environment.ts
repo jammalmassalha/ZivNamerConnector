@@ -1,7 +1,6 @@
 export const environment = {
   production: false,
-  apiUrl: getBaseUrl() + '/api',
-  hubUrl: getBaseUrl() + '/hubs/aran'
+  apiUrl: getBaseUrl() + '/api'
 };
 
 function getBaseUrl(): string {

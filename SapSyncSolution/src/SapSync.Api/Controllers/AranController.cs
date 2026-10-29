@@ -45,6 +45,29 @@ public sealed class AranController : ControllerBase
     }
 
     /// <summary>
+    /// Polling endpoint: returns casualties and KPIs for an incident in a single POST.
+    /// </summary>
+    [HttpPost("poll")]
+    [ProducesResponseType(typeof(AranPollResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AranPollResultDto>> Poll(
+        [FromBody] AranPollRequestDto? request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.AccidentNo))
+            return BadRequest(new { error = "accidentNo is required" });
+
+        var casualties = await QueryCasualtiesAsync(request.AccidentNo, request.Search, cancellationToken);
+        var kpi = await QueryKpisAsync(request.AccidentNo, cancellationToken);
+        return Ok(new AranPollResultDto
+        {
+            Casualties = casualties,
+            Kpi = kpi,
+            ServerTime = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
     /// Retrieve KPI summary (counts by triage status) for a specific incident.
     /// </summary>
     /// <param name="accidentNo">The incident number - required</param>
@@ -356,6 +379,19 @@ public sealed class AranController : ControllerBase
     }
 
     #region DTOs
+
+    public sealed class AranPollRequestDto
+    {
+        public string? AccidentNo { get; set; }
+        public string? Search { get; set; }
+    }
+
+    public sealed class AranPollResultDto
+    {
+        public required IEnumerable<CasualtyDto> Casualties { get; set; }
+        public KpiSummaryDto? Kpi { get; set; }
+        public DateTime ServerTime { get; set; }
+    }
 
     public sealed class CasualtyDto
     {
