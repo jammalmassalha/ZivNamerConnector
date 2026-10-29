@@ -1,327 +1,243 @@
-import { Injectable, OnDestroy } from '@angular/core';
-import { BehaviorSubject, Observable, Subject, interval, Subscription } from 'rxjs';
-import { switchMap, takeUntil, tap, catchError, startWith } from 'rxjs/operators';
-import { AranHttpService } from './aran-http.service';
+import { Injectable, signal, computed, effect, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { timer, Subscription, switchMap, catchError, of, tap, Subject } from 'rxjs';
 import { Casualty, KpiSummary } from '../models/aran.models';
-import { of } from 'rxjs';
 
-export interface DataChangeNotification {
-  type: 'cases' | 'kpis';
-  hasChanges: boolean;
-  changeCount: number;
+export interface AranAlert {
+  id: string;
+  title: string;
   message: string;
-  timestamp: Date;
-  affectedAccidentNo: string;
+  type: 'critical' | 'new' | 'update';
+  timestamp: string;
 }
 
-export interface PollingState {
-  isPolling: boolean;
-  lastPollTime: Date | null;
-  pollCount: number;
-  nextPollIn: number; // seconds
-  error: string | null;
-}
+@Injectable({ providedIn: 'root' })
+export class AranPollingService {
+  private readonly http = inject(HttpClient);
 
-@Injectable({
-  providedIn: 'root',
-})
-export class AranPollingService implements OnDestroy {
-  private readonly POLLING_INTERVAL_MS = 60000; // 1 minute
-  private readonly POLL_TIMEOUT_MS = 30000; // 30 seconds timeout
+  // Signal-based state management
+  readonly cases = signal<Casualty[]>([]);
+  readonly activeAlert = signal<AranAlert | null>(null);
+  readonly updatedCaseIds = signal<Set<string>>(new Set());
+  readonly isSyncing = signal<boolean>(false);
+  readonly lastSyncTime = signal<string>('--:--:--');
+  readonly isConnected = signal<boolean>(true);
 
-  // State management
-  private readonly destroy$ = new Subject<void>();
-  private readonly pollingActive$ = new BehaviorSubject<Map<string, boolean>>(new Map());
-  private readonly pollingState$ = new BehaviorSubject<PollingState>({
-    isPolling: false,
-    lastPollTime: null,
-    pollCount: 0,
-    nextPollIn: this.POLLING_INTERVAL_MS / 1000,
-    error: null,
+  // Computed signals
+  readonly hasActiveAlert = computed(() => this.activeAlert() !== null);
+  readonly connectionStatus = computed(() => {
+    if (this.isSyncing()) return 'סנכרון פעיל (כל 60 שנ׳)';
+    if (this.isConnected()) return 'מחובר בזמן אמת';
+    return 'מנותק - לחץ לרענון';
   });
 
-  // Data management - keep previous state to detect changes
-  private currentCasualtyMap = new Map<string, Casualty[]>();
-  private currentKpiMap = new Map<string, KpiSummary>();
+  private pollingSubscription?: Subscription;
+  private destroy$ = new Subject<void>();
 
-  // Notifications
-  private readonly dataChanged$ = new BehaviorSubject<DataChangeNotification | null>(null);
-  private readonly notifications$ = new Subject<DataChangeNotification>();
-
-  constructor(private aranHttp: AranHttpService) {
-    this.initializePollingTimer();
+  constructor() {
+    // Log initialization
+    const apiUrl = this.getApiUrl();
+    console.log('[AranPollingService] Initialized with API URL:', apiUrl);
   }
 
   /**
-   * Start polling for a specific incident
+   * Resolves API URL respecting IIS sub-directory (/pbi_srv/zivarantest/)
    */
-  startPolling(accidentNo: string): Subscription {
-    if (!accidentNo) {
-      console.error('AccidentNo is required to start polling');
-      return new Subscription();
-    }
+  private getApiUrl(): string {
+    const base = document.querySelector('base')?.getAttribute('href')?.replace(/\/$/, '') || '';
+    return `${base}/api/aran/cases`;
+  }
 
-    const activePolls = this.pollingActive$.value;
-    if (activePolls.has(accidentNo) && activePolls.get(accidentNo)) {
-      console.warn(`Polling already active for ${accidentNo}`);
-      return new Subscription();
-    }
+  /**
+   * Start polling for cases immediately and every 60 seconds
+   */
+  startPolling(): void {
+    if (this.pollingSubscription) return;
 
-    activePolls.set(accidentNo, true);
-    this.pollingActive$.next(activePolls);
+    console.log('[AranPollingService] Starting polling...');
 
-    // Set up interval-based polling
-    const subscription = interval(this.POLLING_INTERVAL_MS)
+    // Trigger immediately (0ms) and repeat every 60,000ms (1 min)
+    this.pollingSubscription = timer(0, 60000)
       .pipe(
-        startWith(0), // Poll immediately on start
-        switchMap(() => this.pollData(accidentNo)),
-        tap(() => this.updatePollingState()),
-        catchError((error) => {
-          console.error(`Polling error for ${accidentNo}:`, error);
-          this.updatePollingState(error.message);
-          return of(null);
-        }),
-        takeUntil(this.destroy$)
+        tap(() => this.isSyncing.set(true)),
+        switchMap(() =>
+          this.http.get<Casualty[]>(this.getApiUrl()).pipe(
+            catchError((err) => {
+              console.error('[AranPollingService] Failed to fetch ARAN cases:', err);
+              this.isConnected.set(false);
+              this.isSyncing.set(false);
+              return of(null);
+            })
+          )
+        )
       )
-      .subscribe();
+      .subscribe((incomingCases) => {
+        this.isSyncing.set(false);
+        if (!incomingCases) return;
 
-    return subscription;
-  }
-
-  /**
-   * Stop polling for a specific incident
-   */
-  stopPolling(accidentNo: string): void {
-    const activePolls = this.pollingActive$.value;
-    activePolls.set(accidentNo, false);
-    this.pollingActive$.next(activePolls);
-  }
-
-  /**
-   * Poll data for an incident (both cases and KPIs)
-   */
-  private pollData(accidentNo: string): Observable<any> {
-    return new Observable((observer) => {
-      const startTime = Date.now();
-      const pollTimeout = setTimeout(() => {
-        observer.error(new Error('Polling timeout'));
-      }, this.POLL_TIMEOUT_MS);
-
-      Promise.all([
-        this.aranHttp.getCases(accidentNo).toPromise(),
-        this.aranHttp.getKpis(accidentNo).toPromise(),
-      ])
-        .then(([cases, kpis]) => {
-          clearTimeout(pollTimeout);
-          const pollDuration = Date.now() - startTime;
-
-          // Check for changes in cases
-          this.checkCasesChanged(accidentNo, cases || []);
-
-          // Check for changes in KPIs
-          this.checkKpisChanged(accidentNo, kpis || null);
-
-          observer.next({
-            accidentNo,
-            cases,
-            kpis,
-            pollDuration,
-            timestamp: new Date(),
-          });
-          observer.complete();
-        })
-        .catch((error) => {
-          clearTimeout(pollTimeout);
-          observer.error(error);
-        });
-    });
-  }
-
-  /**
-   * Detect changes in casualty data
-   */
-  private checkCasesChanged(accidentNo: string, newCases: Casualty[]): void {
-    const previousCases = this.currentCasualtyMap.get(accidentNo) || [];
-    this.currentCasualtyMap.set(accidentNo, newCases);
-
-    if (previousCases.length === 0) {
-      // First load, don't notify
-      return;
-    }
-
-    // Build maps for comparison
-    const previousMap = new Map(previousCases.map((c) => [c.caseNumber, c]));
-    const newMap = new Map(newCases.map((c) => [c.caseNumber, c]));
-
-    let changeCount = 0;
-    const changes: string[] = [];
-
-    // Check for new or modified cases
-    newMap.forEach((newCase, caseNumber) => {
-      const previousCase = previousMap.get(caseNumber);
-      if (!previousCase) {
-        changeCount++;
-        changes.push(`🆕 New case: ${caseNumber}`);
-      } else if (previousCase.triageStatus !== newCase.triageStatus) {
-        changeCount++;
-        changes.push(`🔄 Triage changed: ${caseNumber} (${previousCase.triageStatus} → ${newCase.triageStatus})`);
-      } else if (previousCase.currentLocation !== newCase.currentLocation) {
-        changeCount++;
-        changes.push(`📍 Location changed: ${caseNumber}`);
-      }
-    });
-
-    // Check for removed cases
-    previousMap.forEach((_, caseNumber) => {
-      if (!newMap.has(caseNumber)) {
-        changeCount++;
-        changes.push(`❌ Case removed: ${caseNumber}`);
-      }
-    });
-
-    if (changeCount > 0) {
-      const notification: DataChangeNotification = {
-        type: 'cases',
-        hasChanges: true,
-        changeCount,
-        message: `${changeCount} change${changeCount > 1 ? 's' : ''} detected in casualty cases`,
-        timestamp: new Date(),
-        affectedAccidentNo: accidentNo,
-      };
-
-      this.dataChanged$.next(notification);
-      this.notifications$.next(notification);
-
-      console.log(`Cases changed for ${accidentNo}:`, changes);
-    }
-  }
-
-  /**
-   * Detect changes in KPI data
-   */
-  private checkKpisChanged(accidentNo: string, newKpi: KpiSummary | null): void {
-    if (!newKpi) return;
-
-    const previousKpi = this.currentKpiMap.get(accidentNo);
-    this.currentKpiMap.set(accidentNo, newKpi);
-
-    if (!previousKpi) {
-      // First load, don't notify
-      return;
-    }
-
-    const changes: string[] = [];
-    let changeCount = 0;
-
-    // Compare KPI values
-    if (previousKpi.red !== newKpi.red) {
-      changeCount++;
-      changes.push(`🔴 Red: ${previousKpi.red} → ${newKpi.red}`);
-    }
-    if (previousKpi.yellow !== newKpi.yellow) {
-      changeCount++;
-      changes.push(`🟡 Yellow: ${previousKpi.yellow} → ${newKpi.yellow}`);
-    }
-    if (previousKpi.green !== newKpi.green) {
-      changeCount++;
-      changes.push(`🟢 Green: ${previousKpi.green} → ${newKpi.green}`);
-    }
-    if (previousKpi.black !== newKpi.black) {
-      changeCount++;
-      changes.push(`⚫ Black: ${previousKpi.black} → ${newKpi.black}`);
-    }
-    if (previousKpi.inTreatment !== newKpi.inTreatment) {
-      changeCount++;
-      changes.push(`🏥 In Treatment: ${previousKpi.inTreatment} → ${newKpi.inTreatment}`);
-    }
-
-    if (changeCount > 0) {
-      const notification: DataChangeNotification = {
-        type: 'kpis',
-        hasChanges: true,
-        changeCount,
-        message: `KPI updated: ${changeCount} metric${changeCount > 1 ? 's' : ''} changed`,
-        timestamp: new Date(),
-        affectedAccidentNo: accidentNo,
-      };
-
-      this.dataChanged$.next(notification);
-      this.notifications$.next(notification);
-
-      console.log(`KPIs changed for ${accidentNo}:`, changes);
-    }
-  }
-
-  /**
-   * Get data change notifications stream
-   */
-  getNotifications(): Observable<DataChangeNotification> {
-    return this.notifications$.asObservable();
-  }
-
-  /**
-   * Get latest data change notification
-   */
-  getLatestNotification(): Observable<DataChangeNotification | null> {
-    return this.dataChanged$.asObservable();
-  }
-
-  /**
-   * Get current polling state
-   */
-  getPollingState(): Observable<PollingState> {
-    return this.pollingState$.asObservable();
-  }
-
-  /**
-   * Check if polling is active for an incident
-   */
-  isPollingActive(accidentNo: string): boolean {
-    return this.pollingActive$.value.get(accidentNo) || false;
-  }
-
-  /**
-   * Get all active polling incidents
-   */
-  getActivePollingIncidents(): string[] {
-    return Array.from(this.pollingActive$.value.entries())
-      .filter(([_, isActive]) => isActive)
-      .map(([accidentNo]) => accidentNo);
-  }
-
-  /**
-   * Update polling state display
-   */
-  private updatePollingState(error: string | null = null): void {
-    const currentState = this.pollingState$.value;
-    const newState: PollingState = {
-      isPolling: this.getActivePollingIncidents().length > 0,
-      lastPollTime: new Date(),
-      pollCount: currentState.pollCount + 1,
-      nextPollIn: this.POLLING_INTERVAL_MS / 1000,
-      error,
-    };
-    this.pollingState$.next(newState);
-  }
-
-  /**
-   * Initialize polling state timer for displaying countdown
-   */
-  private initializePollingTimer(): void {
-    interval(1000)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => {
-        const currentState = this.pollingState$.value;
-        if (currentState.isPolling && currentState.nextPollIn > 0) {
-          this.pollingState$.next({
-            ...currentState,
-            nextPollIn: Math.max(0, currentState.nextPollIn - 1),
-          });
-        }
+        this.isConnected.set(true);
+        this.lastSyncTime.set(new Date().toLocaleTimeString('he-IL'));
+        this.processDelta(incomingCases);
       });
   }
 
+  /**
+   * Stop polling and clean up subscriptions
+   */
+  stopPolling(): void {
+    this.pollingSubscription?.unsubscribe();
+    this.pollingSubscription = undefined;
+    console.log('[AranPollingService] Polling stopped');
+  }
+
+  /**
+   * Trigger an immediate refresh cycle
+   */
+  refreshNow(): void {
+    console.log('[AranPollingService] Manual refresh requested');
+    this.isSyncing.set(true);
+    this.http
+      .get<Casualty[]>(this.getApiUrl())
+      .pipe(
+        catchError((err) => {
+          console.error('[AranPollingService] Refresh failed:', err);
+          this.isConnected.set(false);
+          return of(null);
+        })
+      )
+      .subscribe((incomingCases) => {
+        this.isSyncing.set(false);
+        if (!incomingCases) return;
+
+        this.isConnected.set(true);
+        this.lastSyncTime.set(new Date().toLocaleTimeString('he-IL'));
+        this.processDelta(incomingCases);
+      });
+  }
+
+  /**
+   * Detects changes between previous cases and new API payload
+   * Triggers audio/visual alerts on new casualties or triage escalations
+   */
+  private processDelta(newCases: Casualty[]): void {
+    const currentMap = new Map(this.cases().map((c) => [c.caseNumber, c]));
+    const changedIds = new Set<string>();
+    let newVictimsCount = 0;
+    let criticalEscalations = 0;
+
+    for (const item of newCases) {
+      const existing = currentMap.get(item.caseNumber);
+      if (!existing) {
+        // Brand new casualty arrived
+        newVictimsCount++;
+        changedIds.add(item.caseNumber);
+        console.log(`[AranPollingService] New casualty: ${item.caseNumber}`);
+      } else if (
+        existing.triageStatus !== item.triageStatus ||
+        existing.currentMovement !== item.currentMovement ||
+        existing.currentLocation !== item.currentLocation
+      ) {
+        // Casualty updated (severity or room transfer)
+        if (item.triageStatus === 'RED' && existing.triageStatus !== 'RED') {
+          criticalEscalations++;
+          console.log(
+            `[AranPollingService] Critical escalation: ${item.caseNumber} → RED`
+          );
+        }
+        changedIds.add(item.caseNumber);
+      }
+    }
+
+    // Trigger visual/audio alerts if changes detected (skips on initial load)
+    if (currentMap.size > 0 && (newVictimsCount > 0 || changedIds.size > 0)) {
+      this.triggerAlert(newVictimsCount, criticalEscalations, changedIds);
+    }
+
+    // Update state
+    this.cases.set(newCases);
+  }
+
+  /**
+   * Trigger audio chime + visual notifications + row highlight
+   */
+  private triggerAlert(
+    newCount: number,
+    criticalCount: number,
+    changedIds: Set<string>
+  ): void {
+    // 1. Play Sound via Web Audio API (hospital offline compatible)
+    this.playHospitalChime(criticalCount > 0);
+
+    // 2. Set Row Flash Highlight
+    this.updatedCaseIds.set(changedIds);
+    setTimeout(() => this.updatedCaseIds.set(new Set()), 4000); // clear after 4s
+
+    // 3. Set Floating Toast Alert
+    const title =
+      criticalCount > 0 ? 'התראת טריאז׳ קריטי!' : 'עדכון נפגעים בזמן אמת';
+    const message =
+      newCount > 0
+        ? `נקלטו ${newCount} נפגעים חדשים באירוע`
+        : `עודכנו נתוני שהייה ומיקום עבור ${changedIds.size} מטופלים`;
+
+    this.activeAlert.set({
+      id: Date.now().toString(),
+      title,
+      message,
+      type: criticalCount > 0 ? 'critical' : 'new',
+      timestamp: new Date().toLocaleTimeString('he-IL'),
+    });
+
+    // Auto-dismiss alert after 6 seconds
+    setTimeout(() => this.activeAlert.set(null), 6000);
+  }
+
+  /**
+   * Play hospital chime sound using HTML5 Web Audio API
+   * No external MP3 files required - works completely offline
+   */
+  private playHospitalChime(isCritical: boolean): void {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      // Critical = triangle wave at higher frequency (A5 -> A4 sweep)
+      // Standard = sine wave at lower frequency (D5 -> A5 sweep)
+      osc.type = isCritical ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(
+        isCritical ? 880 : 587.33,
+        ctx.currentTime
+      ); // A5 or D5
+      osc.frequency.exponentialRampToValueAtTime(
+        isCritical ? 440 : 880,
+        ctx.currentTime + 0.3
+      );
+
+      // Fade in/out with exponential ramp
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+
+      console.log(
+        `[AranPollingService] Played ${isCritical ? 'critical' : 'standard'} chime`
+      );
+    } catch (e) {
+      // AudioContext blocked by browser autoplay policy until first click
+      console.log('[AranPollingService] AudioContext unavailable:', e);
+    }
+  }
+
+  /**
+   * Clean up on service destroy
+   */
   ngOnDestroy(): void {
+    this.stopPolling();
     this.destroy$.next();
     this.destroy$.complete();
   }

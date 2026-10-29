@@ -31,11 +31,11 @@ import { Casualty } from '../../../core/models/aran.models';
       <div class="table-header">
         <h2>נפגעים פעילים</h2>
         <div class="table-controls">
-          <mat-form-field appearance="fill">
-            <mat-label>חיפוש</mat-label>
+          <mat-form-field appearance="fill" [floatLabel]="'always'" dir="rtl">
+            <mat-label>חיפוש חופשי</mat-label>
             <input
               matInput
-              placeholder="מס׳ מקרה, מטופל, מיקום"
+              placeholder="הקלד מספר תיק, מטופל או מיקום..."
               (input)="onSearchInput($event)"
             />
             <mat-icon matSuffix>search</mat-icon>
