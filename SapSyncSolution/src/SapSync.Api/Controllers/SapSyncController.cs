@@ -66,7 +66,7 @@ public sealed class SapSyncController : ControllerBase
         return result.Success ? Ok(result) : ToErrorResult(result.ErrorType, result);
     }
 
-    /// <summary>Syncs every configured table. Returns 200 when all succeed, otherwise 207 with per-table results.</summary>
+    /// <summary>Syncs every configured atable. Returns 200 when all succeed, otherwise 207 with per-table results.</summary>
     [HttpPost("tables/sync-all")]
     [ProducesResponseType(typeof(IReadOnlyList<TableSyncResult>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(IReadOnlyList<TableSyncResult>), StatusCodes.Status207MultiStatus)]
