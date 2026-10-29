@@ -189,7 +189,12 @@ public sealed class AranController : ControllerBase
         return Ok(history);
     }
 
-    private async Task<IEnumerable<CasualtyDto>> QueryCasualtiesAsync(
+    /// <summary>
+    /// Reads casualties live from the SAP-synced tables (ZNMCICASE / NBEW for the incident's cases,
+    /// sap.N_FALL_BEW for the latest movement). dbo.PATIENT_MONITORING is only used as an optional
+    /// manual triage override, so the dashboard works even if that table is empty.
+    /// </summary>
+    private async Task<List<CasualtyDto>> QueryCasualtiesAsync(
         string accidentNo,
         string? search,
         CancellationToken cancellationToken)
@@ -198,91 +203,100 @@ public sealed class AranController : ControllerBase
         await conn.OpenAsync(cancellationToken);
 
         var sql = @"
-            SELECT 
-                CaseNumber, PatientID, AccidentNo, CaseType, CurrentMovement, 
-                CurrentMovementCode, CurrentLocation, TriageStatus, PatientType, 
-                LastMovementTime, UpdatedAt
-            FROM [dbo].[PATIENT_MONITORING]
-            WHERE AccidentNo = @AccidentNo";
+            ;WITH IncidentCases AS (
+                SELECT PATCASEID, MAX(MEDICAL_STATUS) AS MEDICAL_STATUS
+                FROM (
+                    SELECT PATCASEID, MEDICAL_STATUS FROM [dbo].[ZNMCICASE] WHERE LTRIM(RTRIM(ACCIDENT_NO)) = @AccidentNo
+                    UNION ALL
+                    SELECT PATCASEID, NULL FROM [dbo].[NBEW] WHERE LTRIM(RTRIM(ACCIDENT_NO)) = @AccidentNo
+                ) x
+                GROUP BY PATCASEID
+            ),
+            LatestMovement AS (
+                SELECT n.FALNR, n.PATNR, n.BEWTY, n.BWART, n.FALAR, n.CLASS, n.BWIDT, n.BWITM, n.ZIMMR, n.BETT,
+                       ROW_NUMBER() OVER (PARTITION BY n.FALNR ORDER BY n.BWIDT DESC, n.BWITM DESC, n.LFDBEW DESC) AS rn
+                FROM [sap].[N_FALL_BEW] n
+                WHERE ISNULL(n.STORN, '') = '' AND ISNULL(n.FSTORN, '') = ''
+            )
+            SELECT c.PATCASEID, lm.PATNR, lm.BEWTY, lm.BWART, lm.FALAR, lm.CLASS, lm.BWIDT, lm.BWITM,
+                   lm.ZIMMR, lm.BETT, pm.TriageStatus, c.MEDICAL_STATUS
+            FROM IncidentCases c
+            LEFT JOIN LatestMovement lm ON lm.FALNR = c.PATCASEID AND lm.rn = 1
+            LEFT JOIN [dbo].[PATIENT_MONITORING] pm ON pm.CaseNumber = c.PATCASEID";
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             sql += @"
-            AND (
-                CaseNumber LIKE @Search
-                OR PatientID LIKE @Search
-                OR CurrentLocation LIKE @Search
-            )";
+            WHERE c.PATCASEID LIKE @Search OR lm.PATNR LIKE @Search OR lm.ZIMMR LIKE @Search";
         }
 
-        sql += " ORDER BY TriageStatus DESC, LastMovementTime DESC";
+        sql += " ORDER BY lm.BWIDT DESC, lm.BWITM DESC";
 
         using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AccidentNo", accidentNo);
+        cmd.Parameters.AddWithValue("@AccidentNo", accidentNo.Trim());
         if (!string.IsNullOrWhiteSpace(search))
             cmd.Parameters.AddWithValue("@Search", $"%{search}%");
+
+        static string? Str(System.Data.Common.DbDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i).Trim();
 
         var result = new List<CasualtyDto>();
         using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
+            var bewty = Str(reader, 2);
+            var bwart = Str(reader, 3);
+            var room = Str(reader, 8);
+            var bed = Str(reader, 9);
+            var date = reader.IsDBNull(6) ? (DateTime?)null : reader.GetDateTime(6);
+            var time = reader.IsDBNull(7) ? (TimeSpan?)null : reader.GetTimeSpan(7);
+            var movementTime = CombineDateTime(date, time);
+
             result.Add(new CasualtyDto
             {
-                CaseNumber = reader.GetString(0),
-                PatientID = reader.IsDBNull(1) ? null : reader.GetString(1),
-                AccidentNo = reader.IsDBNull(2) ? null : reader.GetString(2),
-                CaseType = reader.IsDBNull(3) ? null : reader.GetString(3),
-                CurrentMovement = reader.IsDBNull(4) ? null : reader.GetString(4),
-                CurrentLocation = reader.IsDBNull(6) ? null : reader.GetString(6),
-                TriageStatus = reader.IsDBNull(7) ? null : reader.GetString(7),
-                PatientType = reader.IsDBNull(8) ? null : reader.GetString(8),
-                LastMovementTime = reader.IsDBNull(9) ? (DateTime?)null : reader.GetDateTime(9),
-                UpdatedAt = reader.GetDateTime(10)
+                CaseNumber = reader.GetString(0).Trim(),
+                PatientID = Str(reader, 1),
+                AccidentNo = accidentNo.Trim(),
+                CaseType = Str(reader, 4),
+                CurrentMovement = SapSync.Core.Constants.SapMovementMap.TryGetMovementDescription(bewty, bwart),
+                CurrentLocation = string.Join(" / ", new[] { room, bed }.Where(x => !string.IsNullOrWhiteSpace(x))),
+                TriageStatus = NormalizeTriage(Str(reader, 10) ?? Str(reader, 11)),
+                PatientType = SapSync.Core.Constants.SapMovementMap.TryGetPatientType(Str(reader, 5)),
+                LastMovementTime = movementTime,
+                UpdatedAt = movementTime ?? DateTime.UtcNow
             });
         }
 
         return result;
     }
 
+    private static string? NormalizeTriage(string? value) =>
+        value?.Trim().ToUpperInvariant() switch
+        {
+            "RED" => "RED",
+            "YELLOW" => "YELLOW",
+            "GREEN" => "GREEN",
+            "BLACK" => "BLACK",
+            _ => null
+        };
+
     private async Task<KpiSummaryDto?> QueryKpisAsync(string accidentNo, CancellationToken cancellationToken)
     {
-        using var conn = new Microsoft.Data.SqlClient.SqlConnection(_sqlConnectionString);
-        await conn.OpenAsync(cancellationToken);
-
-        const string sql = @"
-            SELECT 
-                COUNT(*) AS Total,
-                SUM(CASE WHEN TriageStatus = 'RED' THEN 1 ELSE 0 END) AS Red,
-                SUM(CASE WHEN TriageStatus = 'YELLOW' THEN 1 ELSE 0 END) AS Yellow,
-                SUM(CASE WHEN TriageStatus = 'GREEN' THEN 1 ELSE 0 END) AS Green,
-                SUM(CASE WHEN TriageStatus = 'BLACK' THEN 1 ELSE 0 END) AS Black,
-                SUM(CASE WHEN CurrentMovement LIKE '%אשפוז%' THEN 1 ELSE 0 END) AS InTreatment
-            FROM [dbo].[PATIENT_MONITORING]
-            WHERE AccidentNo = @AccidentNo";
-
-        using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AccidentNo", accidentNo);
-
-        using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
-            return null;
-
-        var total = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
-        var red = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
-        var yellow = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
-        var green = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
-        var black = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
-        var inTreatment = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
+        var cases = await QueryCasualtiesAsync(accidentNo, null, cancellationToken);
+        var red = cases.Count(c => c.TriageStatus == "RED");
+        var yellow = cases.Count(c => c.TriageStatus == "YELLOW");
+        var green = cases.Count(c => c.TriageStatus == "GREEN");
+        var black = cases.Count(c => c.TriageStatus == "BLACK");
+        var inTreatment = cases.Count(c => c.CurrentMovement != null && c.CurrentMovement.Contains("אשפוז"));
 
         return new KpiSummaryDto
         {
-            Total = total,
+            Total = cases.Count,
             Red = red,
             Yellow = yellow,
             Green = green,
             Black = black,
             InTreatment = inTreatment,
-            Discharged = total - inTreatment - black
+            Discharged = Math.Max(0, cases.Count - inTreatment - black)
         };
     }
 
