@@ -18,12 +18,7 @@ public sealed class TableSyncService : ITableSyncService
     private readonly ILogger<TableSyncService> _logger;
     private readonly Dictionary<string, SyncTableDefinition> _tables;
 
-    public TableSyncService(ISapSyncOrchestrator orchestrator, IOptions<SyncTablesSettings> settings, ILogger<TableSyncService> logger, ILoggerFactory loggerFactory)
-        : this(orchestrator, new DeltaSyncFilterBuilder(loggerFactory.CreateLogger<DeltaSyncFilterBuilder>()), settings, logger)
-    {
-    }
-
-    internal TableSyncService(ISapSyncOrchestrator orchestrator, DeltaSyncFilterBuilder filterBuilder, IOptions<SyncTablesSettings> settings, ILogger<TableSyncService> logger)
+    public TableSyncService(ISapSyncOrchestrator orchestrator, DeltaSyncFilterBuilder filterBuilder, IOptions<SyncTablesSettings> settings, ILogger<TableSyncService> logger)
     {
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
         _filterBuilder = filterBuilder ?? throw new ArgumentNullException(nameof(filterBuilder));
