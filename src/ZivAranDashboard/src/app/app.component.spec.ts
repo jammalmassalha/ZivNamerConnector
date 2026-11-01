@@ -60,4 +60,32 @@ describe('ARAN dashboard startup', () => {
     expect(aranService.selectIncident).toHaveBeenCalledWith('ARAN-1');
     expect(aranService.getIncidentCases).toHaveBeenCalledWith('ARAN-1');
   });
+
+  it('keeps the manual selection on refresh when no new incident arrived', () => {
+    const dashboard = fixture.debugElement.children[0].componentInstance;
+    dashboard.onIncidentChange('ARAN-1');
+
+    dashboard.loadLatestIncidents(true);
+
+    expect(dashboard.selectedIncident()?.accidentNo).toBe('ARAN-1');
+  });
+
+  it('selects a newly arrived incident on refresh', () => {
+    const dashboard = fixture.debugElement.children[0].componentInstance;
+    dashboard.onIncidentChange('ARAN-1');
+    const newIncident = { accidentNo: 'ARAN-3', accidentPlace: 'טבריה', accidentDate: '2026-11-01' };
+    aranService.getLatestIncidents.and.returnValue(
+      of({
+        incidents: [newIncident, ...latestPayload.incidents],
+        selectedIncident: newIncident,
+        cases: [],
+      })
+    );
+
+    dashboard.loadLatestIncidents(true);
+
+    expect(dashboard.selectedIncident()?.accidentNo).toBe('ARAN-3');
+    expect(dashboard.incidents().length).toBe(3);
+    expect(aranService.selectIncident).toHaveBeenCalledWith('ARAN-3');
+  });
 });
