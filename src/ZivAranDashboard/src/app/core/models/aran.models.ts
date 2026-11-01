@@ -5,6 +5,7 @@ export interface IncidentOption {
   accidentPlace?: string | null;
   accidentDate?: string | null;
   accidentTime?: string | null;
+  patientCount?: number;
 }
 
 export interface PatientMovement {

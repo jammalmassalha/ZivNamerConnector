@@ -42,6 +42,10 @@ import { IncidentOption } from '../../../core/models/aran.models';
                 <mat-option *ngFor="let incident of incidents" [value]="incident.accidentNo">
                   {{ incident.accidentNo }}
                   <span *ngIf="incident.accidentPlace"> — {{ incident.accidentPlace }}</span>
+                  <span *ngIf="incident.accidentDate" class="incident-date">
+                    · {{ incident.accidentDate | date: 'dd/MM/yyyy' }}
+                  </span>
+                  <span class="incident-count"> · {{ incident.patientCount ?? 0 }} נפגעים</span>
                 </mat-option>
               </mat-select>
             </mat-form-field>
@@ -122,7 +126,13 @@ import { IncidentOption } from '../../../core/models/aran.models';
       }
 
       .incident-selector {
-        min-width: 250px;
+        min-width: 340px;
+      }
+
+      .incident-date,
+      .incident-count {
+        color: #64748b;
+        font-size: 12px;
       }
 
       .status-badges {
