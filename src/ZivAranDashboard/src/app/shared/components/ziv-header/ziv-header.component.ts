@@ -126,7 +126,7 @@ import { IncidentOption } from '../../../core/models/aran.models';
       }
 
       .incident-selector {
-        min-width: 340px;
+        min-width: 440px;
       }
 
       .incident-selector mat-form-field {
