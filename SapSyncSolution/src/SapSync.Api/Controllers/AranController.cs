@@ -44,9 +44,17 @@ public sealed class AranController : ControllerBase
         await using (var conn = new Microsoft.Data.SqlClient.SqlConnection(_sqlConnectionString))
         {
             await conn.OpenAsync(cancellationToken);
+            // All incidents from the last 6 months (newest first); falls back to the single latest incident if none are that recent.
             const string sql = @"
-                SELECT TOP (10) ACCIDENT_NO, ACCIDENT_PLACE, ACCIDENT_DATE, ACCIDENT_TIME
+                SELECT ACCIDENT_NO, ACCIDENT_PLACE, ACCIDENT_DATE, ACCIDENT_TIME
                 FROM [dbo].[ZNACCIDENT]
+                WHERE ACCIDENT_DATE >= DATEADD(MONTH, -6, CAST(GETDATE() AS date))
+                UNION
+                SELECT * FROM (
+                    SELECT TOP (1) ACCIDENT_NO, ACCIDENT_PLACE, ACCIDENT_DATE, ACCIDENT_TIME
+                    FROM [dbo].[ZNACCIDENT]
+                    ORDER BY ACCIDENT_DATE DESC, ACCIDENT_TIME DESC, ACCIDENT_NO DESC
+                ) AS latest
                 ORDER BY ACCIDENT_DATE DESC, ACCIDENT_TIME DESC, ACCIDENT_NO DESC";
             await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);

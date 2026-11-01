@@ -12,6 +12,8 @@ import { ZivHeaderComponent } from './shared/components/ziv-header/ziv-header.co
 
 type TriageFilter = 'ALL' | 'RED' | 'YELLOW' | 'GREEN' | 'ADMITTED';
 
+const INCIDENTS_REFRESH_INTERVAL_MS = 30_000;
+
 @Component({
   selector: 'app-aran-dashboard',
   standalone: true,
@@ -73,6 +75,8 @@ export class AranDashboardComponent implements OnInit, OnDestroy {
 
   private readonly subscriptions = new Subscription();
   private clockInterval?: ReturnType<typeof setInterval>;
+  private incidentsRefreshInterval?: ReturnType<typeof setInterval>;
+  private latestIncidentNo = '';
   private highlightTimeout?: ReturnType<typeof setTimeout>;
   private pulseTimeout?: ReturnType<typeof setTimeout>;
 
@@ -87,6 +91,10 @@ export class AranDashboardComponent implements OnInit, OnDestroy {
       this.aranService.connectionStatus$.subscribe((connected) => this.isConnected.set(connected))
     );
     this.loadLatestIncidents();
+    this.incidentsRefreshInterval = setInterval(
+      () => this.loadLatestIncidents(true),
+      INCIDENTS_REFRESH_INTERVAL_MS
+    );
     void this.aranService.connect().then(
       () => this.isConnected.set(true),
       (error: unknown) => {
@@ -100,6 +108,7 @@ export class AranDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
     if (this.clockInterval) clearInterval(this.clockInterval);
+    if (this.incidentsRefreshInterval) clearInterval(this.incidentsRefreshInterval);
     if (this.highlightTimeout) clearTimeout(this.highlightTimeout);
     if (this.pulseTimeout) clearTimeout(this.pulseTimeout);
     void this.aranService.disconnect();
@@ -133,24 +142,40 @@ export class AranDashboardComponent implements OnInit, OnDestroy {
     return JSON.stringify(patient, null, 2);
   }
 
-  private loadLatestIncidents(): void {
-    this.isLoading.set(true);
+  private loadLatestIncidents(isRefresh = false): void {
+    if (!isRefresh) this.isLoading.set(true);
     this.subscriptions.add(
       this.aranService.getLatestIncidents().subscribe({
         next: (payload) => {
-          this.incidents.set(payload.incidents ?? []);
-          this.selectedIncident.set(payload.selectedIncident);
-          this.cases.set(payload.cases ?? []);
-          this.isLoading.set(false);
-          if (payload.selectedIncident) {
-            void this.aranService.selectIncident(payload.selectedIncident.accidentNo).catch((error: unknown) => {
-              console.error('Failed to join latest ARAN incident group:', error);
-            });
+          const incidents = payload.incidents ?? [];
+          const latest = payload.selectedIncident ?? incidents[0] ?? null;
+          const latestChanged = !!latest && latest.accidentNo !== this.latestIncidentNo;
+          this.latestIncidentNo = latest?.accidentNo ?? this.latestIncidentNo;
+          this.incidents.set(incidents);
+
+          if (!isRefresh || latestChanged || !this.selectedIncident()) {
+            // Initial load, or a new incident arrived: select the newest one.
+            this.selectedIncident.set(latest);
+            this.cases.set(payload.cases ?? []);
+            this.activeCase.set(null);
+            if (latest) {
+              void this.aranService.selectIncident(latest.accidentNo).catch((error: unknown) => {
+                console.error('Failed to join latest ARAN incident group:', error);
+              });
+            }
+          } else {
+            // Keep the user's selection, refreshing its details from the new list.
+            const selectedNo = this.selectedIncident()?.accidentNo;
+            const refreshed = incidents.find((item) => item.accidentNo === selectedNo);
+            if (refreshed) this.selectedIncident.set(refreshed);
           }
+          if (!isRefresh) this.isLoading.set(false);
         },
         error: (error: unknown) => {
-          this.isLoading.set(false);
-          this.errorMessage.set('טעינת אירועי אר״ן נכשלה');
+          if (!isRefresh) {
+            this.isLoading.set(false);
+            this.errorMessage.set('טעינת אירועי אר״ן נכשלה');
+          }
           console.error('Failed to load latest ARAN incidents:', error);
         },
       })
