@@ -129,6 +129,10 @@ import { IncidentOption } from '../../../core/models/aran.models';
         min-width: 340px;
       }
 
+      .incident-selector mat-form-field {
+        width: 100%;
+      }
+
       .incident-date,
       .incident-count {
         color: #64748b;
