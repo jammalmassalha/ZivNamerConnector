@@ -45,17 +45,28 @@ public sealed class AranController : ControllerBase
         {
             await conn.OpenAsync(cancellationToken);
             // All incidents from the last 6 months (newest first); falls back to the single latest incident if none are that recent.
+            // PATIENT_COUNT = distinct ZNMCICASE cases linked to the incident.
             const string sql = @"
-                SELECT ACCIDENT_NO, ACCIDENT_PLACE, ACCIDENT_DATE, ACCIDENT_TIME
-                FROM [dbo].[ZNACCIDENT]
-                WHERE ACCIDENT_DATE >= DATEADD(MONTH, -6, CAST(GETDATE() AS date))
-                UNION
-                SELECT * FROM (
-                    SELECT TOP (1) ACCIDENT_NO, ACCIDENT_PLACE, ACCIDENT_DATE, ACCIDENT_TIME
+                WITH incidents AS (
+                    SELECT ACCIDENT_NO, ACCIDENT_PLACE, ACCIDENT_DATE, ACCIDENT_TIME
                     FROM [dbo].[ZNACCIDENT]
-                    ORDER BY ACCIDENT_DATE DESC, ACCIDENT_TIME DESC, ACCIDENT_NO DESC
-                ) AS latest
-                ORDER BY ACCIDENT_DATE DESC, ACCIDENT_TIME DESC, ACCIDENT_NO DESC";
+                    WHERE ACCIDENT_DATE >= DATEADD(MONTH, -6, CAST(GETDATE() AS date))
+                    UNION
+                    SELECT * FROM (
+                        SELECT TOP (1) ACCIDENT_NO, ACCIDENT_PLACE, ACCIDENT_DATE, ACCIDENT_TIME
+                        FROM [dbo].[ZNACCIDENT]
+                        ORDER BY ACCIDENT_DATE DESC, ACCIDENT_TIME DESC, ACCIDENT_NO DESC
+                    ) AS latest
+                )
+                SELECT i.ACCIDENT_NO, i.ACCIDENT_PLACE, i.ACCIDENT_DATE, i.ACCIDENT_TIME,
+                       ISNULL(pc.PATIENT_COUNT, 0) AS PATIENT_COUNT
+                FROM incidents i
+                LEFT JOIN (
+                    SELECT LTRIM(RTRIM(ACCIDENT_NO)) AS ACCIDENT_NO, COUNT(DISTINCT PATCASEID) AS PATIENT_COUNT
+                    FROM [dbo].[ZNMCICASE]
+                    GROUP BY LTRIM(RTRIM(ACCIDENT_NO))
+                ) pc ON pc.ACCIDENT_NO = LTRIM(RTRIM(i.ACCIDENT_NO))
+                ORDER BY i.ACCIDENT_DATE DESC, i.ACCIDENT_TIME DESC, i.ACCIDENT_NO DESC";
             await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -65,7 +76,8 @@ public sealed class AranController : ControllerBase
                     AccidentNo = reader.GetString(0).Trim(),
                     AccidentPlace = reader.IsDBNull(1) ? null : reader.GetString(1).Trim(),
                     AccidentDate = reader.IsDBNull(2) ? null : reader.GetDateTime(2),
-                    AccidentTime = reader.IsDBNull(3) ? null : reader.GetTimeSpan(3)
+                    AccidentTime = reader.IsDBNull(3) ? null : reader.GetTimeSpan(3),
+                    PatientCount = reader.GetInt32(4)
                 });
             }
         }
@@ -614,6 +626,7 @@ public sealed class AranController : ControllerBase
         public string? AccidentPlace { get; set; }
         public DateTime? AccidentDate { get; set; }
         public TimeSpan? AccidentTime { get; set; }
+        public int PatientCount { get; set; }
     }
 
     public sealed class AranPatientCaseDto
