@@ -61,31 +61,89 @@ describe('ARAN dashboard startup', () => {
     expect(aranService.getIncidentCases).toHaveBeenCalledWith('ARAN-1');
   });
 
-  it('keeps the manual selection on refresh when no new incident arrived', () => {
+  const makeCase = (caseId: string, accidentNo: string, extra: Record<string, unknown> = {}) => ({
+    caseId,
+    accidentNo,
+    fullName: `Patient ${caseId}`,
+    movements: [],
+    ...extra,
+  });
+
+  it('keeps the manual selection on background refresh when no new incident arrived', () => {
     const dashboard = fixture.debugElement.children[0].componentInstance;
     dashboard.onIncidentChange('ARAN-1');
 
-    dashboard.loadLatestIncidents(true);
+    dashboard.refreshInBackground();
 
     expect(dashboard.selectedIncident()?.accidentNo).toBe('ARAN-1');
   });
 
-  it('selects a newly arrived incident on refresh', () => {
+  it('selects a newly arrived incident on refresh and alerts', () => {
     const dashboard = fixture.debugElement.children[0].componentInstance;
     dashboard.onIncidentChange('ARAN-1');
     const newIncident = { accidentNo: 'ARAN-3', accidentPlace: 'טבריה', accidentDate: '2026-11-01' };
     aranService.getLatestIncidents.and.returnValue(
-      of({
-        incidents: [newIncident, ...latestPayload.incidents],
-        selectedIncident: newIncident,
-        cases: [],
-      })
+      of({ incidents: [newIncident, ...latestPayload.incidents], selectedIncident: newIncident, cases: [] })
     );
 
-    dashboard.loadLatestIncidents(true);
+    dashboard.refreshInBackground();
 
     expect(dashboard.selectedIncident()?.accidentNo).toBe('ARAN-3');
     expect(dashboard.incidents().length).toBe(3);
     expect(aranService.selectIncident).toHaveBeenCalledWith('ARAN-3');
+    expect(dashboard.toasts()[0].kind).toBe('incident');
+  });
+
+  it('adds new patients of the selected incident to the table, highlights them and alerts', () => {
+    const dashboard = fixture.debugElement.children[0].componentInstance;
+    aranService.getIncidentCases.and.returnValue(of([makeCase('100', 'ARAN-2'), makeCase('101', 'ARAN-2')]));
+
+    dashboard.refreshInBackground();
+    fixture.detectChanges();
+
+    expect(aranService.getIncidentCases).toHaveBeenCalledWith('ARAN-2');
+    expect(dashboard.cases().length).toBe(2);
+    expect(dashboard.newCaseIds().has('100')).toBeTrue();
+    expect(dashboard.toasts()[0].kind).toBe('new');
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Patient 100');
+    expect(text).toContain('חדש');
+  });
+
+  it('highlights and alerts on changed patients without clearing the table', () => {
+    const dashboard = fixture.debugElement.children[0].componentInstance;
+    dashboard.cases.set([makeCase('100', 'ARAN-2', { currentStatus: 'קבלה' })]);
+    aranService.getIncidentCases.and.returnValue(of([makeCase('100', 'ARAN-2', { currentStatus: 'אשפוז' })]));
+
+    dashboard.refreshInBackground();
+
+    expect(dashboard.cases()[0].currentStatus).toBe('אשפוז');
+    expect(dashboard.highlightedCaseIds().has('100')).toBeTrue();
+    expect(dashboard.newCaseIds().has('100')).toBeFalse();
+    expect(dashboard.toasts()[0].kind).toBe('update');
+  });
+
+  it('alerts with a switch action when another incident gets new patients', () => {
+    const dashboard = fixture.debugElement.children[0].componentInstance;
+    dashboard.incidents.set([
+      { ...latestPayload.incidents[0], patientCount: 0 },
+      { ...latestPayload.incidents[1], patientCount: 1 },
+    ]);
+    aranService.getLatestIncidents.and.returnValue(
+      of({
+        ...latestPayload,
+        incidents: [
+          { ...latestPayload.incidents[0], patientCount: 0 },
+          { ...latestPayload.incidents[1], patientCount: 3 },
+        ],
+      })
+    );
+
+    dashboard.refreshInBackground();
+    const toast = dashboard.toasts()[0];
+
+    expect(toast.accidentNo).toBe('ARAN-1');
+    dashboard.onToastAction(toast);
+    expect(dashboard.selectedIncident()?.accidentNo).toBe('ARAN-1');
   });
 });

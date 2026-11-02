@@ -370,8 +370,44 @@ mat-icon {
 .aran-triage[data-triage="GREEN"] { background: #dcfce7; color: #166534; }
 .aran-triage[data-triage="BLACK"] { background: #1f2937; color: #fff; }
 .aran-empty { padding: 32px !important; color: #64748b; text-align: center; }
-.aran-row-updated { animation: aran-row-flash 5s ease-out; }
-@keyframes aran-row-flash { 0%, 20% { background: #fef9c3; box-shadow: inset -4px 0 #eab308; } 100% { background: transparent; box-shadow: none; } }
+.aran-row-updated { animation: aran-row-flash 12s ease-out; }
+@keyframes aran-row-flash { 0%, 25% { background: #fef9c3; box-shadow: inset -4px 0 #eab308; } 100% { background: transparent; box-shadow: none; } }
+.aran-row-new { animation: aran-row-enter 0.5s ease-out, aran-row-new-flash 12s ease-out; }
+@keyframes aran-row-enter { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes aran-row-new-flash { 0%, 40% { background: #dcfce7; box-shadow: inset -4px 0 #16a34a; } 100% { background: transparent; box-shadow: none; } }
+.aran-new-badge { display: inline-block; margin-inline-start: 6px; padding: 1px 7px; border-radius: 999px; background: #16a34a; color: #fff; font-size: 11px; font-weight: 700; vertical-align: middle; animation: aran-badge-pop 0.4s ease-out; }
+@keyframes aran-badge-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.aran-sync-status { display: inline-flex; align-items: center; gap: 6px; margin-inline-start: 12px; color: #64748b; font-size: 12px; }
+.aran-sync-status.aran-sync-error { color: #b91c1c; }
+.aran-sync-dot { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; }
+.aran-sync-error .aran-sync-dot { background: #dc2626; }
+.aran-sync-dot.aran-syncing { background: #1e4e9d; animation: aran-sync-blink 0.8s ease-in-out infinite alternate; }
+@keyframes aran-sync-blink { from { opacity: 0.3; } to { opacity: 1; } }
+.aran-refresh-button { width: 26px; height: 26px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; color: #1e4e9d; font-size: 15px; line-height: 1; cursor: pointer; }
+.aran-refresh-button:hover:not(:disabled) { background: #eff6ff; }
+.aran-refresh-button:disabled { opacity: 0.5; cursor: default; }
+
+.aran-toast-stack { position: fixed; bottom: 24px; left: 24px; z-index: 1100; display: flex; flex-direction: column; gap: 10px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.aran-toast { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0; border-inline-start: 5px solid #1e4e9d; box-shadow: 0 10px 25px rgb(15 23 42 / 18%); pointer-events: auto; animation: aran-toast-in 0.35s cubic-bezier(.2,.8,.2,1); }
+.aran-toast[data-kind="new"] { border-inline-start-color: #16a34a; }
+.aran-toast[data-kind="update"] { border-inline-start-color: #eab308; }
+.aran-toast[data-kind="incident"] { border-inline-start-color: #dc2626; }
+.aran-toast[data-kind="error"] { border-inline-start-color: #b91c1c; }
+@keyframes aran-toast-in { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: none; } }
+.aran-toast-icon { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: #eff6ff; color: #1e4e9d; font-weight: 700; }
+.aran-toast[data-kind="new"] .aran-toast-icon { background: #dcfce7; color: #166534; }
+.aran-toast[data-kind="update"] .aran-toast-icon { background: #fef9c3; color: #854d0e; }
+.aran-toast[data-kind="incident"] .aran-toast-icon { background: #fee2e2; color: #b91c1c; }
+.aran-toast-body { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.aran-toast-body strong { color: #0f172a; font-size: 14px; }
+.aran-toast-body span { color: #475569; font-size: 12px; overflow-wrap: anywhere; }
+.aran-toast-action { align-self: center; padding: 4px 12px; border: 0; border-radius: 6px; background: #1e4e9d; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+.aran-toast-close { border: 0; background: transparent; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; }
+.aran-toast-close:hover { color: #0f172a; }
+@media (prefers-reduced-motion: reduce) {
+  .aran-row-new, .aran-row-updated, .aran-toast, .aran-new-badge, .aran-sync-dot.aran-syncing { animation: none; }
+}
 .aran-footer { justify-content: flex-start; margin-top: 12px; color: #64748b; font-size: 12px; }
 .aran-footer > span { display: inline-flex; align-items: center; gap: 7px; }
 .aran-connection-dot { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; }
