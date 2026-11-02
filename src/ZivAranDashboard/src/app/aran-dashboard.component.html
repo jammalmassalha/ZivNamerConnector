@@ -51,6 +51,24 @@
         <div>
           <h2>נפגעים באירוע</h2>
           <span class="aran-result-count">{{ filteredCases().length }} תיקים</span>
+          <span class="aran-sync-status" [class.aran-sync-error]="syncFailed()" aria-live="polite">
+            <span class="aran-sync-dot" [class.aran-syncing]="isSyncing()"></span>
+            <ng-container *ngIf="isSyncing(); else syncIdle">מסנכרן…</ng-container>
+            <ng-template #syncIdle>
+              <ng-container *ngIf="syncFailed(); else syncOk">הסנכרון נכשל — מנסה שוב</ng-container>
+              <ng-template #syncOk>
+                <ng-container *ngIf="lastSyncedAt() as synced">עודכן {{ synced | date: 'HH:mm:ss' }}</ng-container>
+              </ng-template>
+            </ng-template>
+            <button
+              type="button"
+              class="aran-refresh-button"
+              (click)="refreshNow()"
+              [disabled]="isSyncing() || isLoading()"
+              aria-label="רענון נתונים"
+              title="רענון נתונים"
+            >⟳</button>
+          </span>
         </div>
         <label class="aran-search">
           <span aria-hidden="true">⌕</span>
@@ -88,13 +106,17 @@
           </thead>
           <tbody>
             <tr
-              *ngFor="let patient of filteredCases()"
-              [class.aran-row-updated]="highlightedCaseIds().has(patient.caseId)"
+              *ngFor="let patient of filteredCases(); trackBy: trackByCaseId"
+              [class.aran-row-updated]="highlightedCaseIds().has(patient.caseId) && !newCaseIds().has(patient.caseId)"
+              [class.aran-row-new]="newCaseIds().has(patient.caseId)"
               (click)="openCase(patient)"
               tabindex="0"
               (keydown.enter)="openCase(patient)"
             >
-              <td class="aran-case-number">{{ patient.caseId }}</td>
+              <td class="aran-case-number">
+                {{ patient.caseId }}
+                <span *ngIf="newCaseIds().has(patient.caseId)" class="aran-new-badge">חדש</span>
+              </td>
               <td>
                 <strong>{{ patient.fullName || ((patient.firstName || '') + ' ' + (patient.lastName || '')) || 'לא ידוע' }}</strong>
                 <small>{{ patient.patientId || '—' }}</small>
@@ -130,11 +152,32 @@
     <footer class="aran-footer">
       <span [class.aran-offline]="!isConnected()" [class.aran-pulse]="connectionPulse()">
         <span class="aran-connection-dot"></span>
-        {{ isConnected() ? 'חיבור בזמן אמת פעיל' : 'אין חיבור בזמן אמת' }}
+        {{ isConnected() ? 'חיבור בזמן אמת פעיל' : 'סנכרון רקע פעיל (כל 15 שניות)' }}
       </span>
       <span>שעון מערכת: {{ systemTime() | date: 'HH:mm:ss' }}</span>
     </footer>
   </main>
+
+  <div class="aran-toast-stack" aria-live="assertive" aria-atomic="false">
+    <div
+      *ngFor="let toast of toasts(); trackBy: trackByToastId"
+      class="aran-toast"
+      [attr.data-kind]="toast.kind"
+      role="alert"
+    >
+      <span class="aran-toast-icon" aria-hidden="true">
+        {{ toast.kind === 'new' ? '＋' : toast.kind === 'incident' ? '!' : toast.kind === 'error' ? '×' : '↻' }}
+      </span>
+      <div class="aran-toast-body">
+        <strong>{{ toast.title }}</strong>
+        <span>{{ toast.message }}</span>
+      </div>
+      <button *ngIf="toast.actionLabel" type="button" class="aran-toast-action" (click)="onToastAction(toast)">
+        {{ toast.actionLabel }}
+      </button>
+      <button type="button" class="aran-toast-close" aria-label="סגירה" (click)="dismissToast(toast.id)">×</button>
+    </div>
+  </div>
 
   <div *ngIf="activeCase() as patient" class="aran-drawer-backdrop" (click)="closeDrawer()">
     <aside

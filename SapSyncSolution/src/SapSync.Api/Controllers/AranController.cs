@@ -15,8 +15,9 @@ namespace SapSync.Api.Controllers;
 [Produces("application/json")]
 public sealed class AranController : ControllerBase
 {
-    // SAP tables pulled by /api/aran/sync, in dependency order (event, incident cases, movements, detailed movements).
-    private static readonly string[] AranSapTables = { "ZNACCIDENT", "ZNMCICASE", "NBEW", "N_FALL_BEW" };
+    // SAP tables pulled by /api/aran/sync, in dependency order
+    // (event, incident cases, patient cases, patients, movements, detailed movements).
+    private static readonly string[] AranSapTables = { "ZNACCIDENT", "ZNMCICASE", "NFAL", "NPAT", "NBEW", "N_FALL_BEW" };
 
     private readonly AranSyncService _aranSyncService;
     private readonly ITableSyncService _tableSyncService;
@@ -173,7 +174,7 @@ public sealed class AranController : ControllerBase
     }
 
     /// <summary>
-    /// Pulls ZNACCIDENT, ZNMCICASE, NBEW and N_FALL_BEW from SAP into SQL Server, then refreshes PATIENT_MONITORING.
+    /// Pulls ZNACCIDENT, ZNMCICASE, NFAL, NPAT, NBEW and N_FALL_BEW from SAP into SQL Server, then refreshes PATIENT_MONITORING.
     /// Broadcasts updates to all connected clients via SignalR for the affected incident.
     /// </summary>
     /// <param name="request">Optional: filter parameters (accidentNo, fromDate)</param>
@@ -411,7 +412,8 @@ public sealed class AranController : ControllerBase
                 m.MOVEMNT_SEQNO, m.MOVEMNT_CTGRY, m.MOVEMENT_TYPE, m.MOVEMNT_DATE, m.MOVEMNT_TIME,
                 m.DEPARTMENT, m.NURS_TREAT_OU
             FROM [dbo].[ZNMCICASE] c
-            INNER JOIN [dbo].[NFAL] f ON f.PATCASEID = c.PATCASEID
+            -- LEFT JOIN: show a new incident case even before its NFAL/NPAT rows are synced.
+            LEFT JOIN [dbo].[NFAL] f ON f.PATCASEID = c.PATCASEID
             LEFT JOIN [dbo].[NPAT] p ON p.PATIENTID = f.PATIENTID
             LEFT JOIN [dbo].[NBEW] m ON m.PATCASEID = c.PATCASEID
             WHERE LTRIM(RTRIM(c.ACCIDENT_NO)) = @AccidentNo
